@@ -9,6 +9,16 @@
 - **Slurm:** `h100-reserved`, QOS `normal`, no wall-time cap; the sbatch uses 7 days and self-requeues before that.
 
 ## Launched
+- 2026-10-14, jobs `90346` / `90347` (running): 9-way mix of s1..s9 at layer 6, **batch 512**, outputs in `runs/b512/`;
+  random init (val lumped as one `s1-9` group) and s1 init (val `s1` and lumped `s2-9`). From main `b5da069`:
+  ```bash
+  G=.claude/worktrees/gefion/inversion/run_grid.sbatch
+  F="--batch 512 --out_dir runs/b512 --log_every 10 --print_every 50 --print_examples 8 --val_every 500 --val_dump_every 10000 --ckpt_every 20000"
+  RUN_ARGS="--init random --source mixs1to9 --val_groups s1,s2,s3,s4,s5,s6,s7,s8,s9" sbatch --array=0 -J inv-mix9-rand $G ${=F}
+  RUN_ARGS="--init s1 --source mixs1to9 --val_groups s1;s2,s3,s4,s5,s6,s7,s8,s9" sbatch --array=0 -J inv-mix9-s1 $G ${=F}
+  ```
+  (`${=F}`: the login shell is zsh, which does not word-split an unquoted `$F`.) ~13-18 steps/s.
+- 2026-10-14, job `90217` (batch-128 `s` grid, `runs/b128/`) cancelled at steps ~97k-103k; it checkpointed on scancel.
 - 2026-10-14, job `90296` (running): the `90217` grid below with only the layer changed to **`final`** (after
   `final_layer_norm`), from main `66b4b7f` (same training code as `be87c95`), runs `runs/b128/*_Lfinal`:
   ```bash
