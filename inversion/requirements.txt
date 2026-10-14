@@ -5,3 +5,6 @@ huggingface_hub==1.33.0
 safetensors==0.8.0
 numpy==2.2.6
 matplotlib==3.10.9
+# for inversion/plots.ipynb
+pandas==3.0.6
+ipykernel==7.4.0

@@ -1,6 +1,6 @@
 """Loss / accuracy curves for all runs in runs/.
 
-    .venv/bin/python -m inversion.plot [--runs_dir runs] [--runs "*_L6"] [--smooth 0] [--out runs/curves.png]
+    .venv/bin/python -m inversion.plot [--runs_dir runs] [--runs "*_L6"] [--smooth 0] [--log_y] [--max_step N] [--out runs/curves.png]
 
 Every logged point is drawn as a marker (train: one train_log.jsonl row, i.e. a mean over --log_every steps; val: one
 val pass), and the panel titles say how often each was logged. Color = run; line style = which source model's samples
@@ -52,6 +52,8 @@ def main():
     p.add_argument("--runs", default="*", help="glob of run names to include, e.g. '*_L6' or '*mixd12*'")
     p.add_argument("--smooth", type=int, default=0,
                    help="also draw an EMA over this many logged points of each training curve; 0 = points only")
+    p.add_argument("--log_y", action="store_true", help="log-scale y axis for the loss panels (default: linear)")
+    p.add_argument("--max_step", type=int, help="only plot logged points up to this step (the axes rescale to fit)")
     p.add_argument("--out", help="default: <runs_dir>/curves.png")
     args = p.parse_args()
 
@@ -65,6 +67,8 @@ def main():
     for i, run_dir in enumerate(run_dirs):
         name, color = os.path.basename(run_dir), COLORS[i % len(COLORS)]
         train = read_jsonl(os.path.join(run_dir, "train_log.jsonl"))
+        if args.max_step is not None:
+            train = [r for r in train if r["step"] <= args.max_step]
         if train:
             steps = np.array([r["step"] for r in train])
             sources = [k[len("loss_"):] for k in train[0] if k.startswith("loss_")]
@@ -78,6 +82,8 @@ def main():
                 if args.smooth:
                     ax_train.plot(steps[keep], ema(y, args.smooth), style, color=color, lw=1.5)
         val = read_jsonl(os.path.join(run_dir, "val_log.jsonl"))
+        if args.max_step is not None:
+            val = [r for r in val if r["step"] <= args.max_step]
         for s in sorted({r["source"] for r in val}):
             rows = [r for r in val if r["source"] == s]
             vs, style = [r["step"] for r in rows], STYLES.get(s[1:], "-.")
@@ -91,9 +97,9 @@ def main():
         train_note += f"; line = EMA over {args.smooth} points"
     val_note = f"each point = one val pass, every {val_every} steps, {n_val} windows per source"
     ax_train.set(title=f"train loss, by sample source\n{train_note}", xlabel="step", ylabel="cross-entropy (nats)",
-                 yscale="log")
+                 yscale="log" if args.log_y else "linear")
     ax_vloss.set(title=f"val loss, by activation source\n{val_note}", xlabel="step", ylabel="cross-entropy (nats)",
-                 yscale="log")
+                 yscale="log" if args.log_y else "linear")
     ax_vacc.set(title=f"val token accuracy, by activation source\n{val_note}", xlabel="step", ylabel="token accuracy",
                 ylim=(0, 1))
     for ax in axes:

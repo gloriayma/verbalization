@@ -21,7 +21,9 @@ import os
 import signal
 import subprocess
 import time
+import zlib
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer
@@ -37,7 +39,8 @@ FIXED_ARGS = ["source", "init", "layer", "n_tokens", "batch", "lr", "warmup", "w
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--source", required=True, choices=sorted(SOURCE_SETS),
-                   help="model whose activations are inverted; mixw12 = per-sample seeded 50/50 mix of w1 and w2")
+                   help="model whose activations are inverted; mixw12 = per-sample seeded 50/50 mix of w1 and w2; "
+                        "mixs1to9 = uniform per-sample mix of s1..s9")
     p.add_argument("--init", required=True, choices=["random", *MODELS], help="inverter init: pretrained model or random")
     p.add_argument("--name", help="run directory name (default: <init>_inv_<source>_L<layer>, init 'random' -> 'rand')")
     p.add_argument("--out_dir", default="runs")
@@ -55,6 +58,9 @@ def parse_args():
     p.add_argument("--n_val", type=int, default=8192, help="held-out windows from the Pile val set")
     p.add_argument("--val_sources", help="every val pass evaluates on activations of each of these "
                                          "(default: seeds 1 and 2 of the source's family, e.g. d1,d2 for --source d2)")
+    p.add_argument("--val_groups", help="instead of --val_sources: ';'-separated groups of ','-separated sources, one "
+                                        "val row per group, e.g. 's1;s2,s3,s4,s5,s6,s7,s8,s9'. A multi-source group "
+                                        "lumps its sources: each val window's source is drawn once (seeded) from it")
     p.add_argument("--log_every", type=int, default=1,
                    help="write one train_log.jsonl row per this many steps, with stats averaged over them")
     p.add_argument("--print_every", type=int, default=25,
@@ -115,6 +121,28 @@ def truncate_log(path, before_step):
     os.replace(path + ".tmp", path)
 
 
+def parse_val_groups(spec):
+    """'s1;s2,s3' -> [('s1', ['s1']), ('s2-3', ['s2', 's3'])]. A group is named after its member when it has one,
+    else family + index range when the members are consecutive seeds of one family, else members joined with '+'."""
+    groups = []
+    for part in spec.split(";"):
+        members = [m for m in part.split(",") if m]
+        if not members:
+            continue
+        unknown = [m for m in members if m not in MODELS]
+        if unknown:
+            raise SystemExit(f"unknown val source(s) {unknown}; choose from {sorted(MODELS)}")
+        idx = [int(m[1:]) for m in members]
+        if len(members) == 1:
+            name = members[0]
+        elif len({m[0] for m in members}) == 1 and idx == list(range(idx[0], idx[0] + len(idx))):
+            name = f"{members[0][0]}{idx[0]}-{idx[-1]}"
+        else:
+            name = "+".join(members)
+        groups.append((name, members))
+    return groups
+
+
 def gather_acts(sources, names, tokens, src):
     """Activations [B, N, D] where sample b comes from source names[src[b]]."""
     if len(names) == 1:
@@ -137,7 +165,8 @@ def main():
         raise SystemExit(f"--print_every {args.print_every} must be a multiple of --log_every {args.log_every}")
     name = args.name or f"{'rand' if args.init == 'random' else args.init}_inv_{args.source}_L{args.layer}"
     family = SOURCE_SETS[args.source][0][0]
-    args.val_sources = args.val_sources or f"{family}1,{family}2"
+    if not args.val_groups:
+        args.val_sources = args.val_sources or f"{family}1,{family}2"
     run_dir = os.path.join(args.out_dir, name)
     os.makedirs(os.path.join(run_dir, "val_samples"), exist_ok=True)
     for sig in (signal.SIGTERM, signal.SIGUSR1, signal.SIGINT):
@@ -159,7 +188,8 @@ def main():
     torch.backends.cudnn.allow_tf32 = True
     tok = AutoTokenizer.from_pretrained(model_dir("w1"))
     train_names = SOURCE_SETS[args.source]
-    val_names = [n for n in args.val_sources.split(",") if n] if args.val_every else []
+    val_groups = parse_val_groups(args.val_groups or args.val_sources.replace(",", ";")) if args.val_every else []
+    val_names = [n for _, members in val_groups for n in members]
     sources = {n: SourceModel(n, args.layer, device) for n in dict.fromkeys(train_names + val_names)}
     inverter = build_inverter(args.init, args.init_seed, device)
     params = [p for p in inverter.parameters() if p.requires_grad]
@@ -184,9 +214,13 @@ def main():
     print(f"run {name}: init={args.init} source={args.source} {train_names} layer={args.layer} N={args.n_tokens} "
           f"inverter params={n_params / 1e6:.1f}M", flush=True)
 
-    val_tokens = None
-    if val_names:
+    val_tokens, val_src = None, {}
+    if val_groups:
         val_tokens = torch.from_numpy(val_windows(args.n_tokens, args.n_val, args.val_seed, args.allow_eod)).to(device)
+        for group, members in val_groups:
+            # Which member each val window's activations come from: fixed for the group (same every pass, every run).
+            rng = np.random.default_rng([args.val_seed, zlib.crc32(group.encode())])
+            val_src[group] = torch.from_numpy(rng.integers(0, len(members), size=len(val_tokens))).to(device)
 
     def decode(ids):
         return tok.batch_decode(ids.tolist())
@@ -194,23 +228,29 @@ def main():
     @torch.no_grad()
     def validate(step):
         inverter.eval()
-        for src_name in val_names:
+        for src_name, members in val_groups:
             losses, preds = [], []
             for i in range(0, len(val_tokens), args.batch):
                 t = val_tokens[i : i + args.batch]
+                acts = gather_acts(sources, members, t, val_src[src_name][i : i + args.batch])
                 with torch.autocast("cuda", dtype=torch.bfloat16):
-                    logits = invert(inverter, sources[src_name](t), args.input_norm)
+                    logits = invert(inverter, acts, args.input_norm)
                 losses.append(F.cross_entropy(logits.float().flatten(0, 1), t.flatten(), reduction="none").view(t.shape))
                 preds.append(logits.argmax(-1))
             loss, pred = torch.cat(losses), torch.cat(preds)
             correct = pred == val_tokens
             k = min(args.val_examples, len(val_tokens))
             ex_in, ex_out, ex_correct = decode(val_tokens[:k]), decode(pred[:k]), correct[:k].sum(1).tolist()
+            window_src = [members[j] for j in val_src[src_name].tolist()]
             row = {"step": step, "source": src_name, "loss": loss.mean().item(),
                    "tok_acc": correct.float().mean().item(), "exact_match": correct.all(1).float().mean().item(),
                    "pos_acc": correct.float().mean(0).tolist(),
                    "examples": [{"idx": i, "n_correct": ex_correct[i], "input_text": ex_in[i], "output_text": ex_out[i]}
                                 for i in range(k)]}
+            if len(members) > 1:
+                row["sources"] = members
+                for ex in row["examples"]:
+                    ex["source_model"] = window_src[ex["idx"]]
             with open(val_log_path, "a") as f:
                 f.write(json.dumps(row) + "\n")
             print(f"[val step {step}][{src_name}] loss {row['loss']:.4f}  tok_acc {row['tok_acc']:.4f}  "
@@ -228,7 +268,7 @@ def main():
             with gzip.open(path + ".tmp", "wt") as f:
                 for i in range(len(in_ids)):
                     f.write(json.dumps({
-                        "step": step, "source": src_name, "idx": i, "loss": ex_loss[i],
+                        "step": step, "source": src_name, "source_model": window_src[i], "idx": i, "loss": ex_loss[i],
                         "n_correct": sum(corr[i]), "correct": corr[i],
                         "input_text": in_text[i], "output_text": out_text[i],
                         "input_ids": in_ids[i], "output_ids": out_ids[i],

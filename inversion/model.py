@@ -18,7 +18,8 @@ MODELS = {
 }
 DEFAULT_DOWNLOAD = ["w1", "w2", "w3", "d1", "d2", "d3", "s1", "s2", "s3"]
 # A run's --source names one of these; mixes pick a source per sample (see data.source_assignment).
-SOURCE_SETS = {**{k: [k] for k in MODELS}, **{f"mix{f}12": [f"{f}1", f"{f}2"] for f in "wds"}}
+SOURCE_SETS = {**{k: [k] for k in MODELS}, **{f"mix{f}12": [f"{f}1", f"{f}2"] for f in "wds"},
+               "mixs1to9": [f"s{i}" for i in range(1, 10)]}  # only the main seeds go up to 9
 
 
 def model_dir(name):
