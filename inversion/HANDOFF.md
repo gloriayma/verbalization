@@ -207,6 +207,7 @@ about 2.5 GB/day per run, most of it the full val dumps every ~75 s. Changing th
 | seeds | data 0 (which windows), mix 0 (coin flips), init 0 (random init), val 0 | `--data_seed`, `--mix_seed`, `--init_seed`, `--val_seed` |
 | val | 8192 Pile-val windows, every 500 steps, on seeds 1 and 2 of the source's family | `--n_val`, `--val_every`, `--val_sources` |
 | train log | one row per step | `--log_every` |
+| val grouping | one row per val source (no lumping) | `--val_groups` |
 | printing | all examples of the batch, every 25 steps | `--print_every` (0 = off), `--print_examples` |
 | val examples | first 4 val windows in each `val_log.jsonl` row; full dump every val pass | `--val_examples`, `--val_dump_every` |
 | checkpoints | every 2000 steps, plus on any stop signal | `--ckpt_every` |

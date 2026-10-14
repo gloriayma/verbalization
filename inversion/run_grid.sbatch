@@ -6,6 +6,7 @@
 #   FAMILY=d sbatch inversion/run_grid.sbatch                     # data seeds: same init, different data order
 #   FAMILY=s sbatch inversion/run_grid.sbatch --layer final       # combined seeds, extra train.py flags after the script
 #   sbatch --array=3 inversion/run_grid.sbatch                    # just one of the 5
+#   RUN_ARGS="--init random --source mixs1to9" sbatch --array=0 inversion/run_grid.sbatch   # any single run
 #
 # Slurm's QOS caps jobs at 24h: 5 minutes before that, the job checkpoints and requeues itself, and the requeued job
 # resumes from the checkpoint. `scancel` instead checkpoints and stops for good.
@@ -34,7 +35,8 @@ PY=${PY:-$SLURM_SUBMIT_DIR/.venv/bin/python}
 export PYTHONUNBUFFERED=1
 : "${INVERSION_DATA:?export INVERSION_DATA (the data directory) before sbatch}"
 
-$PY -m inversion.train ${RUNS[$SLURM_ARRAY_TASK_ID]} "$@" &
+ARGS=${RUN_ARGS:-${RUNS[$SLURM_ARRAY_TASK_ID]}}  # RUN_ARGS replaces the grid config (use with --array=0)
+$PY -m inversion.train $ARGS "$@" &
 PID=$!
 trap 'echo "time limit near: checkpoint + requeue"; kill -TERM $PID; wait $PID;
       scontrol requeue ${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}' USR1

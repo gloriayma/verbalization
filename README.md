@@ -93,6 +93,7 @@ Run names end in the layer (`_L6`, `_L12`, `_Lfinal`). `--layer 12` is the resid
 ### Training
 ```bash
 mkdir -p runs/slurm && sbatch inversion/run_grid.sbatch         # all 5 runs, 1 GPU each, until you scancel them
+RUN_ARGS="--init random --source mixs1to9" sbatch --array=0 inversion/run_grid.sbatch   # any single run instead
 sbatch --array=3 inversion/run_grid.sbatch                      # just w1_inv_mixw12_L6
 FAMILY=d sbatch inversion/run_grid.sbatch --layer final         # data-seed grid on final-layer activations
 .venv/bin/python -m inversion.train --init w1 --source mixw12   # directly (e.g. on RunPod)
@@ -102,7 +103,8 @@ batch 512). On SIGTERM, SIGUSR1 or Ctrl-C (and therefore on `scancel`), a run ch
 same command resumes from `runs/<name>/ckpt_*.pt`. Slurm jobs requeue themselves 5 minutes before the 24h QOS limit.
 Useful flags: `--layer`, `--n_tokens`, `--batch`, `--log_every` (default 1: one `train_log.jsonl` row per step; N =
 one row per N steps, averaged), `--print_every` (default 25) with `--print_examples` (default 0 = the whole batch),
-`--val_every` (default 500), `--n_val`, `--val_examples` (default 4), `--val_dump_every` (default 0 = every val pass),
+`--val_every` (default 500), `--n_val`, `--val_groups` (e.g. `'s1;s2,s3,s4,s5,s6,s7,s8,s9'`: one val row per group,
+a multi-source group lumped by drawing each val window's source from it), `--val_examples` (default 4), `--val_dump_every` (default 0 = every val pass),
 `--steps` (stop early), and `--input_norm layernorm`.
 
 On a fresh GPU box (e.g. RunPod):
