@@ -9,6 +9,11 @@
 - **Slurm:** `h100-reserved`, QOS `normal`, no wall-time cap; the sbatch uses 7 days and self-requeues before that.
 
 ## Launched
+- 2026-10-14, job `90374` (running): as 90360 but **50-token windows** and **`--layer final`**; random init, s1..s7
+  mix, s8/s9 held out, batch 512, `runs/b512/rand_inv_mixs1to7_Lfinal_N50/`. Adds
+  `--n_tokens 50 --layer final --name rand_inv_mixs1to7_Lfinal_N50` to 90360's RUN_ARGS. ~6.6 steps/s, 37 GB; a val
+  pass ~5 s. Batch benchmark at this size: 512 = 3354 windows/s (37 GB), 1024 = 3707 (+10%, 69 GB), 2048 = OOM.
+  90360 (layer 6, 10 tokens) cancelled at step 23501, checkpointed.
 - 2026-10-14, job `90360` (running): random init, trained on a uniform mix of **s1..s7**, **s8, s9 held out**; batch
   512, layer 6, `runs/b512/rand_inv_mixs1to7_L6/`; val groups `s1-7` (seen) and `s8-9` (held out). From main `2c41f3f`:
   `RUN_ARGS="--init random --source mixs1to7 --val_groups s1,s2,s3,s4,s5,s6,s7;s8,s9" sbatch --array=0 -J inv-mix7-rand $G ${=F}`
