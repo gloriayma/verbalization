@@ -37,6 +37,8 @@ srun --gres=gpu:1 -c 8 --mem=64G -t 30 .venv/bin/jupyter nbconvert --to notebook
 ```
 
 ## `inversion/`: inverting PolyPythia activations
+Setting this up on a new machine? Follow [`inversion/HANDOFF.md`](inversion/HANDOFF.md).
+
 This trains a Pythia-160m (same architecture and parameter count) to recover N input tokens (default 10) from another
 Pythia-160m's residual-stream activations at `--layer` (default 6). The activations replace the token embeddings
 (`inputs_embeds`). Position i is trained with cross-entropy to output token i: no shift, causal attention as in pretraining.
