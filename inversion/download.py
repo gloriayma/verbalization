@@ -15,7 +15,7 @@ import os
 import numpy as np
 from huggingface_hub import hf_hub_download, snapshot_download
 
-from inversion.data import DATA_DIR, EOD, shard_paths, val_path
+from inversion.data import EOD, data_dir, shard_paths, val_path
 from inversion.model import DEFAULT_DOWNLOAD, MODELS, REVISION, model_dir
 
 TRAIN_REPO = "EleutherAI/pile-standard-pythia-preshuffled"
@@ -52,7 +52,7 @@ def download_models(names):
 def download_shards(n):
     for i in range(n):
         fname = f"document-{i:05d}-of-00020.bin"
-        path = hf_hub_download(TRAIN_REPO, fname, repo_type="dataset", local_dir=os.path.join(DATA_DIR, "standard"))
+        path = hf_hub_download(TRAIN_REPO, fname, repo_type="dataset", local_dir=os.path.join(data_dir(), "standard"))
         size = os.path.getsize(path)
         assert size == SHARD_BYTES, f"{path}: {size} bytes, expected {SHARD_BYTES}"
         print(f"shard {fname}: {size / 1e9:.0f} GB ({size // 2 / 1e9:.1f}B tokens)", flush=True)
@@ -65,7 +65,7 @@ def tokenize_val():
         return
     from transformers import AutoTokenizer
 
-    jsonl = hf_hub_download(VAL_REPO, "val.jsonl", repo_type="dataset", local_dir=os.path.join(DATA_DIR, "val"))
+    jsonl = hf_hub_download(VAL_REPO, "val.jsonl", repo_type="dataset", local_dir=os.path.join(data_dir(), "val"))
     tok = AutoTokenizer.from_pretrained(MODELS["w1"], revision=REVISION)  # tokenizer files only; no torch.load
     with open(jsonl) as f:
         texts = [json.loads(line)["text"] for line in f]

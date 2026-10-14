@@ -76,7 +76,7 @@ Run names end in the layer (`_L6`, `_L12`, `_Lfinal`). `--layer 12` is the resid
 
 ### Data and setup
 ```bash
-.venv/bin/python -m inversion.download            # ~65 GB into /mnt/nw/home/g.ma/data/pile ($INVERSION_DATA)
+.venv/bin/python -m inversion.download            # ~65 GB into $INVERSION_DATA (required; no default)
 .venv/bin/python -m inversion.download --shards 4 # add more training shards later (20 x 30 GB exist)
 ```
 - **Train:** shards of `EleutherAI/pile-standard-pythia-preshuffled`, the exact Pythia-tokenized Pile tokens that

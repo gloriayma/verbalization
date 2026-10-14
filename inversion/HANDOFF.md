@@ -44,7 +44,7 @@ git clone https://github.com/gloriayma/verbalization.git && cd verbalization
 python -m venv .venv && source .venv/bin/activate
 pip install torch                                   # the right CUDA build for this cluster
 pip install -r inversion/requirements.txt
-export INVERSION_DATA=/fast/local/disk/pile         # also set this in job scripts (sbatch passes the env through)
+export INVERSION_DATA=/fast/local/disk/pile         # required, no default; sbatch passes it through to jobs
 python -m inversion.download                        # 9 models + val + 2 shards; ~10-30 min depending on bandwidth
 ```
 `download` is idempotent: rerun it to resume, add `--shards 4` for more data, or `--models s4,s5` for more models.

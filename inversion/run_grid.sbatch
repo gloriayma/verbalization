@@ -32,6 +32,7 @@ RUNS=(
 cd "$SLURM_SUBMIT_DIR"
 PY=${PY:-$SLURM_SUBMIT_DIR/.venv/bin/python}
 export PYTHONUNBUFFERED=1
+: "${INVERSION_DATA:?export INVERSION_DATA (the data directory) before sbatch}"
 
 $PY -m inversion.train ${RUNS[$SLURM_ARRAY_TASK_ID]} "$@" &
 PID=$!

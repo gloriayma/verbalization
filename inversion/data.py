@@ -10,16 +10,23 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
-DATA_DIR = os.environ.get("INVERSION_DATA", "/mnt/nw/home/g.ma/data/pile")
 EOD = 0  # <|endoftext|>, separates documents in the token streams
 
 
+def data_dir():
+    """Root for train shards, val tokens and converted models. Machine-specific, so there's no default."""
+    path = os.environ.get("INVERSION_DATA")
+    if not path:
+        raise RuntimeError("set INVERSION_DATA to the data directory (see inversion/HANDOFF.md, section 4)")
+    return path
+
+
 def shard_paths():
-    return sorted(glob.glob(os.path.join(DATA_DIR, "standard", "document-*-of-00020.bin")))
+    return sorted(glob.glob(os.path.join(data_dir(), "standard", "document-*-of-00020.bin")))
 
 
 def val_path():
-    return os.path.join(DATA_DIR, "val_tokens.bin")
+    return os.path.join(data_dir(), "val_tokens.bin")
 
 
 class TokenWindows:
@@ -28,7 +35,7 @@ class TokenWindows:
     def __init__(self, paths, n_tokens, allow_eod=False):
         assert paths, "no token files found; run `python -m inversion.download` first"
         # os.pread rather than np.memmap: memmap page faults hold the GIL, so prefetch threads couldn't overlap the
-        # random reads (~2 ms each on /mnt/nw); pread releases it (~25x more batches/s with 16 threads).
+        # random reads (~2 ms each on a network FS); pread releases it (~25x more batches/s with 16 threads).
         self.fds = [os.open(p, os.O_RDONLY) for p in paths]
         self.n = n_tokens
         self.allow_eod = allow_eod

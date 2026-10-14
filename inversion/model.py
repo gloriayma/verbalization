@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoConfig, GPTNeoXForCausalLM
 
-from inversion.data import DATA_DIR
+from inversion.data import data_dir
 
 REVISION = "step143000"  # final checkpoint (same weights as `main`)
 # Families (checked on the step0 weights): w = weight seeds (different inits, same data order); d = data seeds (one
@@ -24,7 +24,7 @@ SOURCE_SETS = {**{k: [k] for k in MODELS}, **{f"mix{f}12": [f"{f}1", f"{f}2"] fo
 def model_dir(name):
     """Local safetensors copy made by `inversion.download` (the Hub repos only ship pytorch_model.bin, which
     transformers refuses to torch.load on torch < 2.6)."""
-    return os.path.join(DATA_DIR, "models", f"{MODELS[name].split('/')[1]}-{REVISION}")
+    return os.path.join(data_dir(), "models", f"{MODELS[name].split('/')[1]}-{REVISION}")
 
 
 class SourceModel:
