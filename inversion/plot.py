@@ -1,6 +1,6 @@
 """Loss / accuracy curves for all runs in runs/.
 
-    .venv/bin/python -m inversion.plot [--runs_dir runs] [--runs "*_L6"] [--smooth 0] [--out runs/curves.png]
+    .venv/bin/python -m inversion.plot [--runs_dir runs] [--runs "*_L6"] [--smooth 0] [--log_y] [--out runs/curves.png]
 
 Every logged point is drawn as a marker (train: one train_log.jsonl row, i.e. a mean over --log_every steps; val: one
 val pass), and the panel titles say how often each was logged. Color = run; line style = which source model's samples
@@ -52,6 +52,7 @@ def main():
     p.add_argument("--runs", default="*", help="glob of run names to include, e.g. '*_L6' or '*mixd12*'")
     p.add_argument("--smooth", type=int, default=0,
                    help="also draw an EMA over this many logged points of each training curve; 0 = points only")
+    p.add_argument("--log_y", action="store_true", help="log-scale y axis for the loss panels (default: linear)")
     p.add_argument("--out", help="default: <runs_dir>/curves.png")
     args = p.parse_args()
 
@@ -91,9 +92,9 @@ def main():
         train_note += f"; line = EMA over {args.smooth} points"
     val_note = f"each point = one val pass, every {val_every} steps, {n_val} windows per source"
     ax_train.set(title=f"train loss, by sample source\n{train_note}", xlabel="step", ylabel="cross-entropy (nats)",
-                 yscale="log")
+                 yscale="log" if args.log_y else "linear")
     ax_vloss.set(title=f"val loss, by activation source\n{val_note}", xlabel="step", ylabel="cross-entropy (nats)",
-                 yscale="log")
+                 yscale="log" if args.log_y else "linear")
     ax_vacc.set(title=f"val token accuracy, by activation source\n{val_note}", xlabel="step", ylabel="token accuracy",
                 ylim=(0, 1))
     for ax in axes:
