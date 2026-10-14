@@ -35,3 +35,61 @@ Run it headless:
 srun --gres=gpu:1 -c 8 --mem=64G -t 30 .venv/bin/jupyter nbconvert --to notebook --execute \
   olmo3_next_token.ipynb --output /tmp/olmo3_out.ipynb
 ```
+
+## `inversion/`: inverting PolyPythia activations
+This trains a Pythia-160m (same architecture and parameter count) to recover N input tokens (default 10) from another
+Pythia-160m's residual-stream activations at `--layer` (default 6). The activations replace the token embeddings
+(`inputs_embeds`). Position i is trained with cross-entropy to output token i: no shift, causal attention as in pretraining.
+The source model sees only the N tokens, starting at position 0 with no BOS.
+
+Models are the [PolyPythias](https://arxiv.org/abs/2503.09543) weight-seed runs `EleutherAI/pythia-160m-weight-seed{1,2,3}`
+(same data order, different init), at their final checkpoint `step143000`. Here they're called `w1`, `w2`, `w3`. The
+data-seed runs `d1`–`d3` are downloaded too, but no experiments use them yet.
+
+| run | inverter init | inverts activations of |
+|---|---|---|
+| `w1_inv_w1` | w1 (pretrained) | w1 |
+| `w1_inv_w2` | w1 | w2 |
+| `rand_inv_w2` | random | w2 |
+| `w1_inv_mixw12` | w1 | w1 or w2, chosen per sample by a seeded fair coin (`--mix_seed`) |
+| `rand_inv_mixw12` | random | the same mix (same coin flips) |
+
+### Data and setup
+```bash
+.venv/bin/python -m inversion.download            # ~65 GB into /mnt/nw/home/g.ma/data/pile ($INVERSION_DATA)
+.venv/bin/python -m inversion.download --shards 4 # add more training shards later (20 x 30 GB exist)
+```
+- **Train:** shards of `EleutherAI/pile-standard-pythia-preshuffled`, the exact Pythia-tokenized Pile tokens that
+  PolyPythias trained on (data seeds only change the order). Each shard holds 15B tokens. Windows are drawn uniformly
+  at random. A window containing `<|endoftext|>` is redrawn, so every window stays inside one document. The windows at
+  step s depend only on `(--data_seed, s)`, so every run sees identical batches and a resumed run picks up exactly where
+  it left off.
+- **Val:** `EleutherAI/pile_val_test` val split (held out from training), tokenized into `val_tokens.bin`. There are
+  `--n_val` fixed windows (default 8192).
+- The Hub repos only ship `pytorch_model.bin`, which transformers 5.x won't `torch.load` on torch 2.5. So `download`
+  converts each model once to safetensors under `$INVERSION_DATA/models/`, and training loads only those.
+- The random init uses HF's GPT-NeoX init (normal, std 0.02), not GPT-NeoX's small_init/wang_init.
+
+### Training
+```bash
+mkdir -p runs/slurm && sbatch inversion/run_grid.sbatch         # all 5 runs, 1 GPU each, until you scancel them
+sbatch --array=3 inversion/run_grid.sbatch                      # just w1_inv_mixw12
+.venv/bin/python -m inversion.train --init w1 --source mixw12   # directly (e.g. on RunPod)
+```
+Runs train until stopped. The LR warms up linearly over 1000 steps, then stays at 6e-4 (AdamW, bf16 autocast,
+batch 512). On SIGTERM, SIGUSR1 or Ctrl-C (and therefore on `scancel`), a run checkpoints before exiting. Re-running the
+same command resumes from `runs/<name>/ckpt_*.pt`. Slurm jobs requeue themselves 5 minutes before the 24h QOS limit.
+Useful flags: `--layer`, `--n_tokens`, `--print_every` (default 25: prints *every* example of that step's batch),
+`--val_every` (default 500), `--n_val`, `--steps` (stop early), and `--input_norm layernorm`.
+
+### Outputs (`runs/<name>/`)
+- `train_log.jsonl`: one line per step with `loss`, `tok_acc` and `grad_norm`, plus `loss_<src>`, `tok_acc_<src>`
+  and `n_<src>` for each source. In the mix runs, that's the training loss split by w1 vs w2 samples.
+- `val_log.jsonl`: every val pass evaluates the inverter on **both** w1 and w2 activations, whatever it trained on.
+  Each line has loss, token accuracy, exact-sequence match and per-position accuracy.
+- `val_samples/step_<step>_<src>.jsonl.gz`: every val input and inverter output at that step
+  (`zcat ... | head`).
+- `train_samples.log` (also on stdout): `[step S][w2] 7/10  IN : '...'  OUT: '...'` for every example of every
+  `--print_every`-th batch.
+- `.venv/bin/python -m inversion.plot` writes `runs/curves.png`: training loss split by sample source, plus val
+  loss and accuracy split by activation source.
