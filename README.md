@@ -107,10 +107,18 @@ pip install -r inversion/requirements.txt
 export INVERSION_DATA=/workspace/pile                   # wherever the ~65 GB should go
 python -m inversion.download --shards 1                 # 1 shard (15B tokens) is plenty for a smoke test; w/d/s seeds 1-3
 # smoke: short mixed run, then resume it, then check throughput at full batch size
-python -m inversion.train --init w1 --source mixw12 --out_dir smoke --steps 200 --batch 32 --n_val 256 --val_every 100 --print_every 50 --ckpt_every 100
-python -m inversion.train --init w1 --source mixw12 --out_dir smoke --steps 300 --batch 32 --n_val 256 --val_every 100 --print_every 50 --ckpt_every 100
-python -m inversion.train --init random --source mixw12 --out_dir smoke --name speed --steps 400 --val_every 200 --print_every 100
+python -m inversion.train --init s1 --source mixs12 --out_dir smoke --steps 200 --batch 32 --n_val 256 --val_every 100 --print_every 50 --ckpt_every 100
+python -m inversion.train --init s1 --source mixs12 --out_dir smoke --steps 300 --batch 32 --n_val 256 --val_every 100 --print_every 50 --ckpt_every 100
+python -m inversion.train --init random --source mixs12 --out_dir smoke --name speed --steps 400 --val_every 200 --print_every 100
 ```
+Then run the 5-run grid of one family, one GPU each, in the background (needs >= 5 GPUs, e.g. a 5x H100 pod):
+```bash
+FAMILY=s bash inversion/run_pod.sh start     # logs in runs/logs/; extra train.py flags go after `start`
+bash inversion/run_pod.sh status             # alive pids, latest train/val line per run, GPU util
+bash inversion/run_pod.sh stop               # each run checkpoints and exits; `start` again resumes them
+```
+**Always `run_pod.sh stop` before stopping the pod.** Pod shutdown doesn't signal the training processes, so anything
+since the last checkpoint (every 1000 steps here) would be lost.
 
 ### Outputs (`runs/<name>/`)
 - `train_log.jsonl`: one line per step with `loss`, `tok_acc` and `grad_norm`, plus `loss_<src>`, `tok_acc_<src>`

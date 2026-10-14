@@ -145,11 +145,11 @@ def main():
     device = "cuda"
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    tok = AutoTokenizer.from_pretrained(model_dir("w1"))
     train_names = SOURCE_SETS[args.source]
+    tok = AutoTokenizer.from_pretrained(model_dir(train_names[0]))  # same tokenizer for every PolyPythia
     val_names = [n for n in args.val_sources.split(",") if n] if args.val_every else []
     sources = {n: SourceModel(n, args.layer, device) for n in dict.fromkeys(train_names + val_names)}
-    inverter = build_inverter(args.init, args.init_seed, device)
+    inverter = build_inverter(args.init, args.init_seed, device, config_from=train_names[0])
     params = [p for p in inverter.parameters() if p.requires_grad]
     opt = torch.optim.AdamW(
         [{"params": [p for p in params if p.ndim >= 2], "weight_decay": args.weight_decay},

@@ -57,13 +57,14 @@ class SourceModel:
         return out
 
 
-def build_inverter(init, init_seed, device):
+def build_inverter(init, init_seed, device, config_from):
     """Pythia-160m: pretrained weights of a PolyPythia (init='w1', ...) or freshly initialized (init='random').
 
-    Random init uses HF's GPTNeoX init (normal std=initializer_range), not GPT-NeoX's small_init/wang_init.
+    Random init takes its config from the downloaded model `config_from` (all PolyPythia-160m configs are identical) and
+    uses HF's GPTNeoX init (normal std=initializer_range), not GPT-NeoX's small_init/wang_init.
     """
     if init == "random":
-        config = AutoConfig.from_pretrained(model_dir("w1"))
+        config = AutoConfig.from_pretrained(model_dir(config_from))
         torch.manual_seed(init_seed)
         model = GPTNeoXForCausalLM(config)
     else:
