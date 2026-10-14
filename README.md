@@ -130,5 +130,8 @@ python -m inversion.train --init random --source mixw12 --out_dir smoke --name s
 - `.venv/bin/python -m inversion.plot` writes `runs/curves.png`: training loss split by sample source, plus val
   loss and accuracy split by activation source. Every logged point is a marker, and the titles give the logging
   cadence (`--smooth N` adds an EMA line).
+- `inversion/plots.ipynb` (kernel "Python (verbalization .venv)") has all the plotting logic for editing: it reads
+  `config.json`, `train_log.jsonl` and `val_log.jsonl` from `RUNS_DIR` directly (no repo imports) into pandas tables,
+  with the colors, labels and panels in one cell and the step range in each figure cell.
 - `.venv/bin/python -m inversion.watch --runs '*_L6'` is a live terminal view: it redraws on every val pass with each
   run's latest train stats and, per val source, the val metrics and the fixed val examples (input → output).
