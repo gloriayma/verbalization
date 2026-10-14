@@ -9,6 +9,14 @@
 - **Slurm:** `h100-reserved`, QOS `normal`, no wall-time cap; the sbatch uses 7 days and self-requeues before that.
 
 ## Launched
+- 2026-10-14, job `90296` (running): the `90217` grid below with only the layer changed to **`final`** (after
+  `final_layer_norm`), from main `66b4b7f` (same training code as `be87c95`), runs `runs/b128/*_Lfinal`:
+  ```bash
+  cd ~/dev/verbalization && FAMILY=s sbatch .claude/worktrees/gefion/inversion/run_grid.sbatch --layer final \
+      --batch 128 --out_dir runs/b128 --log_every 10 --print_every 10 --print_examples 8 --val_every 250 \
+      --val_dump_every 2500 --ckpt_every 50000
+  .venv/bin/python -m inversion.watch --runs_dir runs/b128 --runs "*_Lfinal"   # live view
+  ```
 - 2026-10-14, job `90217` (running): `s` family, layer 6, **batch 128**, from main `be87c95`, outputs in `runs/b128/`:
   ```bash
   cd ~/dev/verbalization && FAMILY=s sbatch .claude/worktrees/gefion/inversion/run_grid.sbatch --batch 128 \
