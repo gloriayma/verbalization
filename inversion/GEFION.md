@@ -9,6 +9,10 @@
 - **Slurm:** `h100-reserved`, QOS `normal`, no wall-time cap; the sbatch uses 7 days and self-requeues before that.
 
 ## Launched
+- 2026-10-14, job `90360` (running): random init, trained on a uniform mix of **s1..s7**, **s8, s9 held out**; batch
+  512, layer 6, `runs/b512/rand_inv_mixs1to7_L6/`; val groups `s1-7` (seen) and `s8-9` (held out). From main `2c41f3f`:
+  `RUN_ARGS="--init random --source mixs1to7 --val_groups s1,s2,s3,s4,s5,s6,s7;s8,s9" sbatch --array=0 -J inv-mix7-rand $G ${=F}`
+  (same `F` as below). Jobs 90346/90347 (9-way mix) were cancelled at steps ~30k/29k and checkpointed.
 - 2026-10-14, jobs `90346` / `90347` (running): 9-way mix of s1..s9 at layer 6, **batch 512**, outputs in `runs/b512/`;
   random init (val lumped as one `s1-9` group) and s1 init (val `s1` and lumped `s2-9`). From main `b5da069`:
   ```bash
