@@ -23,9 +23,13 @@ model family F (`w` weight seeds, `d` data seeds, `s` main seeds) there are 5 ru
   - Inverter parameter counts match the source (162.3M).
   - Training windows decode to clean Pile text, and the max token id is 50276.
   - Batches are identical for the same (seed, step).
-  - The data loader manages ~27 batches/s of 512 on the old cluster's network FS.
-- **Never run on a GPU:** the training loop, resume, signal checkpointing, val logging, plotting, and real throughput.
-  Section 5 is the first GPU run; expect to fix small things.
+  - The data loader manages ~27 batches/s of 512 on the old cluster's network FS (30/s on a Weka parallel FS).
+- **Checked on an H100** (smoke test, section 5, all criteria passed with no code changes): the training loop, resume,
+  signal checkpointing, val logging, identical coin flips across mixed runs, plotting, and the overfit check (loss
+  10.9 → 0.002 in 300 steps). Measured at full size (batch 512, mixed source):
+  - ~20 steps/s, i.e. ~0.9B windows/day, so 2 shards (~3B windows) ≈ 3.4 days of sampling.
+  - ~10 GB GPU memory at ~85% util, so any ≥24 GB GPU really is plenty.
+  - A val pass (2 × 8192 windows) takes ~1.3 s. A checkpoint (inverter + AdamW) is 1.6 GB.
 
 ## 3. Requirements
 - **GPU:** one per run. A 160M model at batch 512 × 10 tokens is small, so any ≥24 GB GPU is plenty. A family grid
@@ -41,7 +45,7 @@ model family F (`w` weight seeds, `d` data seeds, `s` main seeds) there are 5 ru
 ## 4. Setup
 ```bash
 git clone https://github.com/gloriayma/verbalization.git && cd verbalization
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate     # from a Python the GPU nodes also have (see below)
 pip install torch                                   # the right CUDA build for this cluster
 pip install -r inversion/requirements.txt
 export INVERSION_DATA=/fast/local/disk/pile         # required, no default; sbatch passes it through to jobs
@@ -56,6 +60,11 @@ It produces:
   loads these.
 - `$INVERSION_DATA/val_tokens.bin`: the Pile val split, 341M tokens, uint16, documents separated by token 0.
 - `$INVERSION_DATA/standard/document-0000{0,1}-of-00020.bin`: exactly 30,000,000,000 bytes each (the script asserts it).
+
+Build `.venv` from an interpreter that exists at the same path on the GPU nodes. The venv only symlinks its
+interpreter, so a login node's system Python that differs from the compute nodes' (e.g. `/opt/conda` 3.12 vs 3.13)
+gives `No module named 'torch'` in jobs. A uv-managed Python under `$HOME` avoids this:
+`uv venv .venv --python 3.12 --python-preference only-managed`.
 
 Put `INVERSION_DATA` on local disk if you can. Training does random 20-byte reads, ~2 ms each on the old cluster's
 NFS. The loader uses `os.pread` with 32 threads, because `np.memmap` held the GIL and capped it at 2 batches/s.
@@ -155,10 +164,11 @@ To plot and inspect:
 python -m inversion.plot --runs '*_L6' --out runs/curves_L6.png
 zcat runs/s1_inv_s2_L6/val_samples/step_000010000_s2.jsonl.gz | head -3
 ```
-**Watch the disk.** With the defaults, every 25 steps each run prints all 512 examples of the batch, about 75 KB, to
-both stdout and `train_samples.log`. Each val pass writes about 2 × 8192 gzipped JSON lines. Once you know steps/s from
-smoke test (e), work out GB/day per run and raise `--print_every` / `--val_every` if needed. Changing these does not
-block resuming.
+**Watch the disk.** With the defaults, every 25 steps each run prints all 512 examples of the batch, about 60 KB, to
+both stdout and `train_samples.log`. Each val pass writes about 1.6 MB of gzipped JSON (2 × 8192 lines). At ~20
+steps/s on an H100 that's per run about 8 GB/day of printing and 5.5 GB/day of val samples, plus a 1.6 GB checkpoint
+every ~100 s. The first H100 grid was launched with `--print_every 500 --val_every 2000 --ckpt_every 20000`: a val pass
+every ~100 s, a checkpoint every ~17 min, about 1.8 GB/day per run. Changing these does not block resuming.
 
 ## 8. Findings so far (verified by comparing checkpoints)
 - **The weight seeds were not trained from different inits.** Each `pythia-160m-weight-seed{1,2,3}` repo's `step0` is
