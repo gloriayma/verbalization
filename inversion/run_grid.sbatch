@@ -38,4 +38,7 @@ $PY -m inversion.train ${RUNS[$SLURM_ARRAY_TASK_ID]} "$@" &
 PID=$!
 trap 'echo "time limit near: checkpoint + requeue"; kill -TERM $PID; wait $PID;
       scontrol requeue ${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}' USR1
+# scancel SIGTERMs this shell too; without a trap it exits at once, the job ends, and Slurm kills train.py before it
+# has checkpointed. Wait for it instead (train.py gets the same SIGTERM; Slurm's KillWait bounds how long we have).
+trap 'kill -TERM $PID 2>/dev/null; wait $PID' TERM
 wait $PID

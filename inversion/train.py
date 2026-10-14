@@ -4,10 +4,12 @@
 
 Re-running the same command resumes from the latest checkpoint in runs/<name>/. Outputs in runs/<name>/:
     config.json             arguments (+ git commit)
-    train_log.jsonl         one line per step: loss, token accuracy, grad norm, and per-source loss/acc/count
-    val_log.jsonl           one line per (val step, source): loss, token acc, exact match, per-position acc
-    val_samples/step_*.jsonl.gz   every val input and inverter output at that step, for each val source
-    train_samples.log       every example of the batch every --print_every steps (also printed to stdout)
+    train_log.jsonl         one line per --log_every steps (averaged over them; `step` = the last one): loss, token
+                            accuracy, grad norm, per-source loss/acc/count, n_steps, wall-clock time
+    val_log.jsonl           one line per (val step, source): loss, token acc, exact match, per-position acc, and the
+                            first --val_examples val windows with the inverter's output (the same windows every time)
+    val_samples/step_*.jsonl.gz   every val input and inverter output, every --val_dump_every steps, per val source
+    train_samples.log       the batch's examples (--print_examples of them) every --print_every steps (also on stdout)
     ckpt_*.pt               last two checkpoints (model + optimizer)
 """
 
@@ -53,8 +55,16 @@ def parse_args():
     p.add_argument("--n_val", type=int, default=8192, help="held-out windows from the Pile val set")
     p.add_argument("--val_sources", help="every val pass evaluates on activations of each of these "
                                          "(default: seeds 1 and 2 of the source's family, e.g. d1,d2 for --source d2)")
+    p.add_argument("--log_every", type=int, default=1,
+                   help="write one train_log.jsonl row per this many steps, with stats averaged over them")
     p.add_argument("--print_every", type=int, default=25,
-                   help="print every example of the batch (step, source, input, output) every this many steps; 0 = off")
+                   help="print the batch's examples (step, source, input, output) every this many steps; 0 = off. "
+                        "Must be a multiple of --log_every (the header shows that log row)")
+    p.add_argument("--print_examples", type=int, default=0, help="examples per print; 0 = the whole batch")
+    p.add_argument("--val_examples", type=int, default=4,
+                   help="the first K val windows and their outputs go in each val_log.jsonl row and are printed")
+    p.add_argument("--val_dump_every", type=int, default=0,
+                   help="write the full val_samples dump only at val steps divisible by this; 0 = every val pass")
     p.add_argument("--ckpt_every", type=int, default=2000)
     p.add_argument("--data_seed", type=int, default=0, help="which windows each step sees (shared by all runs)")
     p.add_argument("--mix_seed", type=int, default=0, help="per-sample source choice in mixed runs")
@@ -123,6 +133,8 @@ def gather_acts(sources, names, tokens, src):
 
 def main():
     args = parse_args()
+    if args.print_every and args.print_every % args.log_every:
+        raise SystemExit(f"--print_every {args.print_every} must be a multiple of --log_every {args.log_every}")
     name = args.name or f"{'rand' if args.init == 'random' else args.init}_inv_{args.source}_L{args.layer}"
     family = SOURCE_SETS[args.source][0][0]
     args.val_sources = args.val_sources or f"{family}1,{family}2"
@@ -192,13 +204,22 @@ def main():
                 preds.append(logits.argmax(-1))
             loss, pred = torch.cat(losses), torch.cat(preds)
             correct = pred == val_tokens
+            k = min(args.val_examples, len(val_tokens))
+            ex_in, ex_out, ex_correct = decode(val_tokens[:k]), decode(pred[:k]), correct[:k].sum(1).tolist()
             row = {"step": step, "source": src_name, "loss": loss.mean().item(),
                    "tok_acc": correct.float().mean().item(), "exact_match": correct.all(1).float().mean().item(),
-                   "pos_acc": correct.float().mean(0).tolist()}
+                   "pos_acc": correct.float().mean(0).tolist(),
+                   "examples": [{"idx": i, "n_correct": ex_correct[i], "input_text": ex_in[i], "output_text": ex_out[i]}
+                                for i in range(k)]}
             with open(val_log_path, "a") as f:
                 f.write(json.dumps(row) + "\n")
             print(f"[val step {step}][{src_name}] loss {row['loss']:.4f}  tok_acc {row['tok_acc']:.4f}  "
                   f"exact {row['exact_match']:.4f}  pos_acc {' '.join(f'{a:.2f}' for a in row['pos_acc'])}", flush=True)
+            for ex in row["examples"]:
+                print(f"[val step {step}][{src_name}] {ex['n_correct']}/{args.n_tokens}  "
+                      f"IN : {ex['input_text']!r}  OUT: {ex['output_text']!r}", flush=True)
+            if args.val_dump_every and step % args.val_dump_every:
+                continue
 
             in_text, out_text = decode(val_tokens), decode(pred)
             in_ids, out_ids, corr = val_tokens.tolist(), pred.tolist(), correct.int().tolist()
@@ -213,19 +234,31 @@ def main():
                         "input_ids": in_ids[i], "output_ids": out_ids[i],
                     }) + "\n")
             os.replace(path + ".tmp", path)
-            for i in range(4):
-                print(f"[val step {step}][{src_name}] {sum(corr[i])}/{args.n_tokens}  "
-                      f"IN : {in_text[i]!r}  OUT: {out_text[i]!r}", flush=True)
         inverter.train()
+
+    def write_train_row(step, lr, sums, n_steps):
+        """One train_log row from the summed per-step stats of the last n_steps steps (ending at `step`)."""
+        sums = sums.tolist()  # the one host sync per row
+        row = {"step": step, "n_steps": n_steps, "time": time.time(), "lr": lr, "loss": sums[0] / n_steps,
+               "tok_acc": sums[1] / n_steps, "grad_norm": sums[2] / n_steps}
+        for k, src_name in enumerate(train_names):
+            loss_sum, acc_sum, n = sums[3 + 3 * k : 6 + 3 * k]
+            row[f"loss_{src_name}"], row[f"tok_acc_{src_name}"] = loss_sum / max(n, 1), acc_sum / max(n, 1)
+            row[f"n_{src_name}"] = int(n)
+        train_log.write(json.dumps(row) + "\n")
+        return row
 
     batches = TrainBatches(TokenWindows(shard_paths(), args.n_tokens, args.allow_eod), args.batch,
                            args.data_seed, args.mix_seed, len(train_names), start_step)
     train_log = open(train_log_path, "a", buffering=1)  # line-buffered: the log never lags the checkpoints
     samples_log = open(os.path.join(run_dir, "train_samples.log"), "a")
     t_last, step_last = time.time(), start_step
+    sums, n_summed = None, 0  # per-step stats summed on the GPU since the last train_log row
     inverter.train()
     for step, tokens_np, src_np in batches:
         if args.steps and step >= args.steps:
+            if sums is not None:
+                write_train_row(step - 1, lr, sums, n_summed)
             if val_names:
                 validate(step)
             save_checkpoint(run_dir, step, inverter, opt)
@@ -248,42 +281,42 @@ def main():
         grad_norm = torch.nn.utils.clip_grad_norm_(params, args.grad_clip)
         opt.step()
 
-        # One host sync per step for all the stats.
+        # Stats stay on the GPU and are summed; they're synced once per train_log row (every --log_every steps).
         pred = logits.detach().argmax(-1)
         correct = (pred == tokens).float()
         sample_loss, sample_acc = tok_loss.detach().mean(1), correct.mean(1)
         stats = [loss.detach(), correct.mean(), grad_norm]
         for k in range(len(train_names)):
             m = (src == k).float()
-            n = m.sum()
-            stats += [(sample_loss * m).sum() / n.clamp(min=1), (sample_acc * m).sum() / n.clamp(min=1), n]
-        stats = torch.stack(stats).tolist()
-        row = {"step": step, "lr": lr, "loss": stats[0], "tok_acc": stats[1], "grad_norm": stats[2]}
-        for k, src_name in enumerate(train_names):
-            row[f"loss_{src_name}"], row[f"tok_acc_{src_name}"], row[f"n_{src_name}"] = stats[3 + 3 * k : 6 + 3 * k]
-            row[f"n_{src_name}"] = int(row[f"n_{src_name}"])
-        train_log.write(json.dumps(row) + "\n")
-
-        if args.print_every and step % args.print_every == 0:
-            now = time.time()
-            per_src = "  ".join(f"{n} {row[f'loss_{n}']:.4f}" for n in train_names)
-            header = (f"[step {step}] loss {row['loss']:.4f} ({per_src})  tok_acc {row['tok_acc']:.4f}  "
-                      f"grad_norm {row['grad_norm']:.2f}  lr {lr:.2e}  "
-                      f"{(step - step_last) / max(now - t_last, 1e-9):.2f} steps/s")
-            t_last, step_last = now, step
-            in_text, out_text = decode(tokens), decode(pred)
-            n_correct = correct.sum(1).int().tolist()
-            lines = [header] + [
-                f"[step {step}][{train_names[s]}] {c}/{args.n_tokens}  IN : {i!r}  OUT: {o!r}"
-                for s, c, i, o in zip(src_np.tolist(), n_correct, in_text, out_text)
-            ]
-            text = "\n".join(lines) + "\n"
-            print(text, end="", flush=True)
-            samples_log.write(text)
-            samples_log.flush()
+            stats += [(sample_loss * m).sum(), (sample_acc * m).sum(), m.sum()]
+        stats = torch.stack(stats)
+        sums, n_summed = (stats, 1) if sums is None else (sums + stats, n_summed + 1)
 
         done = step + 1
-        if STOP["signal"] is not None:
+        stopping = STOP["signal"] is not None
+        if done % args.log_every == 0 or stopping:
+            row = write_train_row(step, lr, sums, n_summed)
+            sums, n_summed = None, 0
+            if args.print_every and done % args.print_every == 0:
+                now = time.time()
+                per_src = "  ".join(f"{n} {row[f'loss_{n}']:.4f}" for n in train_names)
+                header = (f"[step {step}] loss {row['loss']:.4f} ({per_src})  tok_acc {row['tok_acc']:.4f}  "
+                          f"grad_norm {row['grad_norm']:.2f}  lr {lr:.2e}  "
+                          f"{(step - step_last) / max(now - t_last, 1e-9):.2f} steps/s")
+                t_last, step_last = now, step
+                n_show = args.print_examples or len(tokens)
+                in_text, out_text = decode(tokens[:n_show]), decode(pred[:n_show])
+                n_correct = correct[:n_show].sum(1).int().tolist()
+                lines = [header] + [
+                    f"[step {step}][{train_names[s]}] {c}/{args.n_tokens}  IN : {i!r}  OUT: {o!r}"
+                    for s, c, i, o in zip(src_np.tolist(), n_correct, in_text, out_text)
+                ]
+                text = "\n".join(lines) + "\n"
+                print(text, end="", flush=True)
+                samples_log.write(text)
+                samples_log.flush()
+
+        if stopping:
             print(f"got signal {STOP['signal']}; checkpointing at step {done} and exiting", flush=True)
             save_checkpoint(run_dir, done, inverter, opt)
             break

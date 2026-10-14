@@ -120,7 +120,8 @@ for step in range(301):
 ```
 
 ## 6. Launching
-Runs train **until stopped**. Ctrl-C, SIGTERM or `scancel` makes a run checkpoint and exit. Re-running the same
+Runs train **until stopped**. Ctrl-C, SIGTERM or `scancel` makes a run checkpoint and exit (`run_grid.sbatch` traps
+SIGTERM and waits for `train.py`; without that, `scancel` killed runs before they could checkpoint). Re-running the same
 command resumes it from `runs/<name>/`; a run refuses to resume if you change a setting that affects training.
 
 **With Slurm:** first edit the `#SBATCH` lines in `inversion/run_grid.sbatch` (partition/QOS, `--mem`, `--time`)
@@ -153,22 +154,27 @@ done
 
 ## 7. Monitoring and outputs
 Each run writes `runs/<name>/`:
-- `train_log.jsonl`: every step, with per-source loss, accuracy and count.
-- `val_log.jsonl`: every `--val_every` steps (default 500), on both seed-1 and seed-2 activations of the family.
-- `val_samples/step_<step>_<src>.jsonl.gz`: every val input/output pair.
+- `train_log.jsonl`: every `--log_every` steps (default 1), averaged over them, with per-source loss, accuracy and count.
+- `val_log.jsonl`: every `--val_every` steps (default 500), on both seed-1 and seed-2 activations of the family,
+  including the first `--val_examples` (default 4) val inputs and outputs.
+- `val_samples/step_<step>_<src>.jsonl.gz`: every val input/output pair, every `--val_dump_every` steps (default:
+  every val pass).
 - `train_samples.log`
 - `ckpt_*.pt`
 
-To plot and inspect:
+To watch live, plot and inspect:
 ```bash
-python -m inversion.plot --runs '*_L6' --out runs/curves_L6.png
+python -m inversion.watch --runs '*_L6'                   # redraws on every val pass; fixed val examples per run × source
+python -m inversion.plot --runs '*_L6' --out runs/curves_L6.png    # every logged point drawn; cadence in the titles
 zcat runs/s1_inv_s2_L6/val_samples/step_000010000_s2.jsonl.gz | head -3
 ```
 **Watch the disk.** With the defaults, every 25 steps each run prints all 512 examples of the batch, about 60 KB, to
 both stdout and `train_samples.log`. Each val pass writes about 1.6 MB of gzipped JSON (2 × 8192 lines). At ~20
 steps/s on an H100 that's per run about 8 GB/day of printing and 5.5 GB/day of val samples, plus a 1.6 GB checkpoint
 every ~100 s. The first H100 grid was launched with `--print_every 500 --val_every 2000 --ckpt_every 20000`: a val pass
-every ~100 s, a checkpoint every ~17 min, about 1.8 GB/day per run. Changing these does not block resuming.
+every ~100 s, a checkpoint every ~17 min, about 1.8 GB/day per run. The second (batch 128, ~33 steps/s with val) used
+`--log_every 10 --print_every 10 --print_examples 8 --val_every 250 --val_dump_every 2500 --ckpt_every 50000`:
+about 2.5 GB/day per run, most of it the full val dumps every ~75 s. Changing these does not block resuming.
 
 ## 8. Findings so far (verified by comparing checkpoints)
 - **The weight seeds were not trained from different inits.** Each `pythia-160m-weight-seed{1,2,3}` repo's `step0` is
@@ -200,7 +206,9 @@ every ~100 s, a checkpoint every ~17 min, about 1.8 GB/day per run. Changing the
 | LR | 6e-4 with 1000 warmup steps, then constant | `--lr`, `--warmup` |
 | seeds | data 0 (which windows), mix 0 (coin flips), init 0 (random init), val 0 | `--data_seed`, `--mix_seed`, `--init_seed`, `--val_seed` |
 | val | 8192 Pile-val windows, every 500 steps, on seeds 1 and 2 of the source's family | `--n_val`, `--val_every`, `--val_sources` |
-| printing | all examples of the batch, every 25 steps | `--print_every` (0 = off) |
+| train log | one row per step | `--log_every` |
+| printing | all examples of the batch, every 25 steps | `--print_every` (0 = off), `--print_examples` |
+| val examples | first 4 val windows in each `val_log.jsonl` row; full dump every val pass | `--val_examples`, `--val_dump_every` |
 | checkpoints | every 2000 steps, plus on any stop signal | `--ckpt_every` |
 | random init | HF GPT-NeoX init (normal, std 0.02), not GPT-NeoX's small_init/wang_init | none |
 

@@ -100,8 +100,10 @@ FAMILY=d sbatch inversion/run_grid.sbatch --layer final         # data-seed grid
 Runs train until stopped. The LR warms up linearly over 1000 steps, then stays at 6e-4 (AdamW, bf16 autocast,
 batch 512). On SIGTERM, SIGUSR1 or Ctrl-C (and therefore on `scancel`), a run checkpoints before exiting. Re-running the
 same command resumes from `runs/<name>/ckpt_*.pt`. Slurm jobs requeue themselves 5 minutes before the 24h QOS limit.
-Useful flags: `--layer`, `--n_tokens`, `--print_every` (default 25: prints *every* example of that step's batch),
-`--val_every` (default 500), `--n_val`, `--steps` (stop early), and `--input_norm layernorm`.
+Useful flags: `--layer`, `--n_tokens`, `--batch`, `--log_every` (default 1: one `train_log.jsonl` row per step; N =
+one row per N steps, averaged), `--print_every` (default 25) with `--print_examples` (default 0 = the whole batch),
+`--val_every` (default 500), `--n_val`, `--val_examples` (default 4), `--val_dump_every` (default 0 = every val pass),
+`--steps` (stop early), and `--input_norm layernorm`.
 
 On a fresh GPU box (e.g. RunPod):
 ```bash
@@ -115,13 +117,18 @@ python -m inversion.train --init random --source mixw12 --out_dir smoke --name s
 ```
 
 ### Outputs (`runs/<name>/`)
-- `train_log.jsonl`: one line per step with `loss`, `tok_acc` and `grad_norm`, plus `loss_<src>`, `tok_acc_<src>`
-  and `n_<src>` for each source. In the mix runs, that's the training loss split by w1 vs w2 samples.
+- `train_log.jsonl`: one line per `--log_every` steps with `loss`, `tok_acc` and `grad_norm` averaged over those
+  steps, plus `loss_<src>`, `tok_acc_<src>` and `n_<src>` for each source, `n_steps`, and wall-clock `time`. `step` is
+  the last step of the window. In the mix runs, that's the training loss split by w1 vs w2 samples.
 - `val_log.jsonl`: every val pass evaluates the inverter on **both** w1 and w2 activations, whatever it trained on.
-  Each line has loss, token accuracy, exact-sequence match and per-position accuracy.
-- `val_samples/step_<step>_<src>.jsonl.gz`: every val input and inverter output at that step
-  (`zcat ... | head`).
-- `train_samples.log` (also on stdout): `[step S][w2] 7/10  IN : '...'  OUT: '...'` for every example of every
-  `--print_every`-th batch.
+  Each line has loss, token accuracy, exact-sequence match, per-position accuracy, and `examples`: the first
+  `--val_examples` val windows with the inverter's output (the same windows every pass).
+- `val_samples/step_<step>_<src>.jsonl.gz`: every val input and inverter output at that step, every
+  `--val_dump_every` steps (`zcat ... | head`).
+- `train_samples.log` (also on stdout): a header plus `[step S][w2] 7/10  IN : '...'  OUT: '...'` for
+  `--print_examples` examples of every `--print_every`-th batch.
 - `.venv/bin/python -m inversion.plot` writes `runs/curves.png`: training loss split by sample source, plus val
-  loss and accuracy split by activation source.
+  loss and accuracy split by activation source. Every logged point is a marker, and the titles give the logging
+  cadence (`--smooth N` adds an EMA line).
+- `.venv/bin/python -m inversion.watch --runs '*_L6'` is a live terminal view: it redraws on every val pass with each
+  run's latest train stats and, per val source, the val metrics and the fixed val examples (input → output).
