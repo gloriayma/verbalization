@@ -196,18 +196,20 @@ def main():
                   f"exact {row['exact_match']:.4f}  pos_acc {' '.join(f'{a:.2f}' for a in row['pos_acc'])}", flush=True)
 
             in_text, out_text = decode(val_tokens), decode(pred)
+            in_ids, out_ids, corr = val_tokens.tolist(), pred.tolist(), correct.int().tolist()
+            ex_loss = loss.mean(1).tolist()
             path = os.path.join(run_dir, "val_samples", f"step_{step:09d}_{src_name}.jsonl.gz")
             with gzip.open(path + ".tmp", "wt") as f:
-                for i in range(len(val_tokens)):
+                for i in range(len(in_ids)):
                     f.write(json.dumps({
-                        "step": step, "source": src_name, "idx": i, "loss": loss[i].mean().item(),
-                        "n_correct": int(correct[i].sum()), "correct": correct[i].int().tolist(),
+                        "step": step, "source": src_name, "idx": i, "loss": ex_loss[i],
+                        "n_correct": sum(corr[i]), "correct": corr[i],
                         "input_text": in_text[i], "output_text": out_text[i],
-                        "input_ids": val_tokens[i].tolist(), "output_ids": pred[i].tolist(),
+                        "input_ids": in_ids[i], "output_ids": out_ids[i],
                     }) + "\n")
             os.replace(path + ".tmp", path)
             for i in range(4):
-                print(f"[val step {step}][{src_name}] {int(correct[i].sum())}/{args.n_tokens}  "
+                print(f"[val step {step}][{src_name}] {sum(corr[i])}/{args.n_tokens}  "
                       f"IN : {in_text[i]!r}  OUT: {out_text[i]!r}", flush=True)
         inverter.train()
 

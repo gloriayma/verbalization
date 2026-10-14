@@ -1,0 +1,7 @@
+# Versions from the cluster venv (torch 2.5.1+cu121 there; any CUDA torch >= 2.5 works, e.g. a RunPod PyTorch image's).
+transformers==5.18.0
+tokenizers==0.23.2
+huggingface_hub==1.33.0
+safetensors==0.8.0
+numpy==2.2.6
+matplotlib==3.10.9

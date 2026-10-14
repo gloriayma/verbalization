@@ -82,6 +82,17 @@ same command resumes from `runs/<name>/ckpt_*.pt`. Slurm jobs requeue themselves
 Useful flags: `--layer`, `--n_tokens`, `--print_every` (default 25: prints *every* example of that step's batch),
 `--val_every` (default 500), `--n_val`, `--steps` (stop early), and `--input_norm layernorm`.
 
+On a fresh GPU box (e.g. RunPod):
+```bash
+pip install -r inversion/requirements.txt
+export INVERSION_DATA=/workspace/pile                   # wherever the ~65 GB should go
+python -m inversion.download --shards 1                 # 1 shard (15B tokens) is plenty for a smoke test
+# smoke: short mixed run, then resume it, then check throughput at full batch size
+python -m inversion.train --init w1 --source mixw12 --out_dir smoke --steps 200 --batch 32 --n_val 256 --val_every 100 --print_every 50 --ckpt_every 100
+python -m inversion.train --init w1 --source mixw12 --out_dir smoke --steps 300 --batch 32 --n_val 256 --val_every 100 --print_every 50 --ckpt_every 100
+python -m inversion.train --init random --source mixw12 --out_dir smoke --name speed --steps 400 --val_every 200 --print_every 100
+```
+
 ### Outputs (`runs/<name>/`)
 - `train_log.jsonl`: one line per step with `loss`, `tok_acc` and `grad_norm`, plus `loss_<src>`, `tok_acc_<src>`
   and `n_<src>` for each source. In the mix runs, that's the training loss split by w1 vs w2 samples.
