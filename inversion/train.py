@@ -40,7 +40,7 @@ def parse_args():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--source", required=True, choices=sorted(SOURCE_SETS),
                    help="model whose activations are inverted; mixw12 = per-sample seeded 50/50 mix of w1 and w2; "
-                        "mixs1to9 = uniform per-sample mix of s1..s9")
+                        "mixs1to9 / mixs1to7 = uniform per-sample mix of s1..s9 / s1..s7")
     p.add_argument("--init", required=True, choices=["random", *MODELS], help="inverter init: pretrained model or random")
     p.add_argument("--name", help="run directory name (default: <init>_inv_<source>_L<layer>, init 'random' -> 'rand')")
     p.add_argument("--out_dir", default="runs")
