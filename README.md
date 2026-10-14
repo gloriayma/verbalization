@@ -42,17 +42,35 @@ Pythia-160m's residual-stream activations at `--layer` (default 6). The activati
 (`inputs_embeds`). Position i is trained with cross-entropy to output token i: no shift, causal attention as in pretraining.
 The source model sees only the N tokens, starting at position 0 with no BOS.
 
-Models are the [PolyPythias](https://arxiv.org/abs/2503.09543) weight-seed runs `EleutherAI/pythia-160m-weight-seed{1,2,3}`
-(same data order, different init), at their final checkpoint `step143000`. Here they're called `w1`, `w2`, `w3`. The
-data-seed runs `d1`–`d3` are downloaded too, but no experiments use them yet.
+Models are [PolyPythias](https://arxiv.org/abs/2503.09543) 160m runs at their final checkpoint `step143000`, in three
+families. `download` fetches seeds 1–3 of each by default (`--models` adds more, e.g. `s4,s5`):
+
+| family | Hub repos | short names | what differs (as documented) | what the checkpoints show |
+|---|---|---|---|---|
+| weight seeds | `pythia-160m-weight-seed{1,2,3}` | `w1`–`w3` | init only | **same init** as original Pythia (see below) |
+| data seeds | `pythia-160m-data-seed{1,2,3}` | `d1`–`d3` | data order only | same init (= original pythia-160m's), different data order |
+| main seeds | `pythia-160m-seed{1..9}` | `s1`–`s9` | init and data order | different init and data order |
+
+**Caveat on the weight seeds** (checked 2026-10-14 by comparing weights). Each weight-seed repo's `step0` is a distinct
+random init. But its `step1` is bit-identical to the original `EleutherAI/pythia-160m`'s `step1`, and its final
+weights have zero cosine with its own `step0`. Meanwhile they have the same ~0.13 cosine with the original Pythia init
+that every model trained from that init shows. So w1, w2 and w3 were trained from the *original* Pythia init, not
+the different inits their `step0` suggests. They still drift apart, as much as the data seeds do: final weight
+cosine is ~0.2 within and across the w and d families, and ~0 for any pair involving an s model. Whatever made them
+diverge, "weight seed" here does not mean a different starting point. For truly different inits, use the s family.
+
+For a family `F` in `w`, `d`, `s`, the grid is:
 
 | run | inverter init | inverts activations of |
 |---|---|---|
-| `w1_inv_w1` | w1 (pretrained) | w1 |
-| `w1_inv_w2` | w1 | w2 |
-| `rand_inv_w2` | random | w2 |
-| `w1_inv_mixw12` | w1 | w1 or w2, chosen per sample by a seeded fair coin (`--mix_seed`) |
-| `rand_inv_mixw12` | random | the same mix (same coin flips) |
+| `F1_inv_F1_L6` | F1 (pretrained) | F1 |
+| `F1_inv_F2_L6` | F1 | F2 |
+| `rand_inv_F2_L6` | random | F2 |
+| `F1_inv_mixF12_L6` | F1 | F1 or F2, chosen per sample by a seeded fair coin (`--mix_seed`) |
+| `rand_inv_mixF12_L6` | random | the same mix (same coin flips) |
+
+Run names end in the layer (`_L6`, `_L12`, `_Lfinal`). `--layer 12` is the residual stream after the last block;
+`--layer final` is after `final_layer_norm`, i.e. what the unembedding sees.
 
 ### Data and setup
 ```bash
@@ -73,7 +91,8 @@ data-seed runs `d1`–`d3` are downloaded too, but no experiments use them yet.
 ### Training
 ```bash
 mkdir -p runs/slurm && sbatch inversion/run_grid.sbatch         # all 5 runs, 1 GPU each, until you scancel them
-sbatch --array=3 inversion/run_grid.sbatch                      # just w1_inv_mixw12
+sbatch --array=3 inversion/run_grid.sbatch                      # just w1_inv_mixw12_L6
+FAMILY=d sbatch inversion/run_grid.sbatch --layer final         # data-seed grid on final-layer activations
 .venv/bin/python -m inversion.train --init w1 --source mixw12   # directly (e.g. on RunPod)
 ```
 Runs train until stopped. The LR warms up linearly over 1000 steps, then stays at 6e-4 (AdamW, bf16 autocast,
@@ -86,7 +105,7 @@ On a fresh GPU box (e.g. RunPod):
 ```bash
 pip install -r inversion/requirements.txt
 export INVERSION_DATA=/workspace/pile                   # wherever the ~65 GB should go
-python -m inversion.download --shards 1                 # 1 shard (15B tokens) is plenty for a smoke test
+python -m inversion.download --shards 1                 # 1 shard (15B tokens) is plenty for a smoke test; w/d/s seeds 1-3
 # smoke: short mixed run, then resume it, then check throughput at full batch size
 python -m inversion.train --init w1 --source mixw12 --out_dir smoke --steps 200 --batch 32 --n_val 256 --val_every 100 --print_every 50 --ckpt_every 100
 python -m inversion.train --init w1 --source mixw12 --out_dir smoke --steps 300 --batch 32 --n_val 256 --val_every 100 --print_every 50 --ckpt_every 100

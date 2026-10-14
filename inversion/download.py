@@ -1,7 +1,8 @@
-"""Download the PolyPythia 160m weight/data-seed models, Pile training shards, and the Pile val set.
+"""Download PolyPythia 160m models (weight-, data- and combined seeds), Pile training shards, and the Pile val set.
 
     .venv/bin/python -m inversion.download              # models + 2 train shards + val
     .venv/bin/python -m inversion.download --shards 4   # add more shards later (already-downloaded ones are skipped)
+    .venv/bin/python -m inversion.download --skip_val --shards 0 --models s4,s5  # more models
 
 The train shards are raw uint16 token streams (Pythia tokenizer, documents separated by <|endoftext|> = 0), i.e. the
 exact tokens PolyPythias trained on; data seeds only change the order. The val set is tokenized here into the same format.
@@ -15,20 +16,21 @@ import numpy as np
 from huggingface_hub import hf_hub_download, snapshot_download
 
 from inversion.data import DATA_DIR, EOD, shard_paths, val_path
-from inversion.model import MODELS, REVISION, model_dir
+from inversion.model import DEFAULT_DOWNLOAD, MODELS, REVISION, model_dir
 
 TRAIN_REPO = "EleutherAI/pile-standard-pythia-preshuffled"
 VAL_REPO = "EleutherAI/pile_val_test"
 SHARD_BYTES = 30_000_000_000
 
 
-def download_models():
+def download_models(names):
     import shutil
 
     import torch
     from safetensors.torch import save_file
 
-    for name, repo in MODELS.items():
+    for name in names:
+        repo = MODELS[name]
         out = model_dir(name)
         if os.path.exists(os.path.join(out, "model.safetensors")):
             print(f"model {name}: already at {out}", flush=True)
@@ -81,11 +83,12 @@ def tokenize_val():
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--shards", type=int, default=2, help="number of the 20 train shards (30 GB each) to download")
+    p.add_argument("--models", default=",".join(DEFAULT_DOWNLOAD), help=f"any of {','.join(MODELS)}")
     p.add_argument("--skip_models", action="store_true")
     p.add_argument("--skip_val", action="store_true")
     args = p.parse_args()
     if not args.skip_models:
-        download_models()
+        download_models(args.models.split(","))
     if not args.skip_val:
         tokenize_val()
     download_shards(args.shards)

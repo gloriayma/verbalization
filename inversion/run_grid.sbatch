@@ -1,8 +1,11 @@
 #!/bin/bash
-# The 5 inversion experiments, one GPU each, training until you scancel them.
+# The 5 inversion experiments for one seed family, one GPU each, training until you scancel them.
 #
-#   cd ~/dev/verbalization && mkdir -p runs/slurm && sbatch inversion/run_grid.sbatch [extra train.py flags]
-#   sbatch --array=3 inversion/run_grid.sbatch          # just one of them
+#   cd ~/dev/verbalization && mkdir -p runs/slurm
+#   sbatch inversion/run_grid.sbatch                              # weight seeds (w), layer 6
+#   FAMILY=d sbatch inversion/run_grid.sbatch                     # data seeds: same init, different data order
+#   FAMILY=s sbatch inversion/run_grid.sbatch --layer final       # combined seeds, extra train.py flags after the script
+#   sbatch --array=3 inversion/run_grid.sbatch                    # just one of the 5
 #
 # Slurm's QOS caps jobs at 24h: 5 minutes before that, the job checkpoints and requeues itself, and the requeued job
 # resumes from the checkpoint. `scancel` instead checkpoints and stops for good.
@@ -17,12 +20,13 @@
 #SBATCH --open-mode=append
 #SBATCH --output=runs/slurm/%x_%A_%a.out
 
+F=${FAMILY:-w}
 RUNS=(
-  "--init w1 --source w1"
-  "--init w1 --source w2"
-  "--init random --source w2"
-  "--init w1 --source mixw12"
-  "--init random --source mixw12"
+  "--init ${F}1 --source ${F}1"
+  "--init ${F}1 --source ${F}2"
+  "--init random --source ${F}2"
+  "--init ${F}1 --source mix${F}12"
+  "--init random --source mix${F}12"
 )
 
 cd "$SLURM_SUBMIT_DIR"

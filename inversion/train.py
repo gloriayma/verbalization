@@ -37,9 +37,11 @@ def parse_args():
     p.add_argument("--source", required=True, choices=sorted(SOURCE_SETS),
                    help="model whose activations are inverted; mixw12 = per-sample seeded 50/50 mix of w1 and w2")
     p.add_argument("--init", required=True, choices=["random", *MODELS], help="inverter init: pretrained model or random")
-    p.add_argument("--name", help="run directory name (default: <init>_inv_<source>, init 'random' -> 'rand')")
+    p.add_argument("--name", help="run directory name (default: <init>_inv_<source>_L<layer>, init 'random' -> 'rand')")
     p.add_argument("--out_dir", default="runs")
-    p.add_argument("--layer", type=int, default=6, help="residual stream after this block (0 = token embeddings)")
+    p.add_argument("--layer", default="6", choices=[*map(str, range(13)), "final"],
+                   help="residual stream after this block (0 = token embeddings, 12 = after the last block); "
+                        "'final' = after final_layer_norm, i.e. the unembedding's input")
     p.add_argument("--n_tokens", type=int, default=10)
     p.add_argument("--batch", type=int, default=512)
     p.add_argument("--lr", type=float, default=6e-4)
@@ -49,7 +51,8 @@ def parse_args():
     p.add_argument("--steps", type=int, default=0, help="stop after this many steps; 0 = train until stopped")
     p.add_argument("--val_every", type=int, default=500, help="0 = no validation")
     p.add_argument("--n_val", type=int, default=8192, help="held-out windows from the Pile val set")
-    p.add_argument("--val_sources", default="w1,w2", help="every val pass evaluates on activations of each of these")
+    p.add_argument("--val_sources", help="every val pass evaluates on activations of each of these "
+                                         "(default: seeds 1 and 2 of the source's family, e.g. d1,d2 for --source d2)")
     p.add_argument("--print_every", type=int, default=25,
                    help="print every example of the batch (step, source, input, output) every this many steps; 0 = off")
     p.add_argument("--ckpt_every", type=int, default=2000)
@@ -120,7 +123,9 @@ def gather_acts(sources, names, tokens, src):
 
 def main():
     args = parse_args()
-    name = args.name or f"{'rand' if args.init == 'random' else args.init}_inv_{args.source}"
+    name = args.name or f"{'rand' if args.init == 'random' else args.init}_inv_{args.source}_L{args.layer}"
+    family = SOURCE_SETS[args.source][0][0]
+    args.val_sources = args.val_sources or f"{family}1,{family}2"
     run_dir = os.path.join(args.out_dir, name)
     os.makedirs(os.path.join(run_dir, "val_samples"), exist_ok=True)
     for sig in (signal.SIGTERM, signal.SIGUSR1, signal.SIGINT):
