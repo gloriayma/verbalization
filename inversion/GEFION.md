@@ -23,7 +23,7 @@
   ```
   (`${=F}`: the login shell is zsh, which does not word-split an unquoted `$F`.) ~13-18 steps/s.
 - 2026-10-14, job `90217` (batch-128 `s` grid, `runs/b128/`) cancelled at steps ~97k-103k; it checkpointed on scancel.
-- 2026-10-14, job `90296` (running): the `90217` grid below with only the layer changed to **`final`** (after
+- 2026-10-14, job `90296` (cancelled at steps ~85k-103k after ~1h16m; it checkpointed on scancel): the `90217` grid above with only the layer changed to **`final`** (after
   `final_layer_norm`), from main `66b4b7f` (same training code as `be87c95`), runs `runs/b128/*_Lfinal`:
   ```bash
   cd ~/dev/verbalization && FAMILY=s sbatch .claude/worktrees/gefion/inversion/run_grid.sbatch --layer final \
