@@ -9,6 +9,18 @@
 - **Slurm:** `h100-reserved`, QOS `normal`, no wall-time cap; the sbatch uses 7 days and self-requeues before that.
 
 ## Launched
+- 2026-10-15, jobs `91696` / `91697` (running): s1->s1, 1 token, `--layer final`, batch 128, lr 6e-4; 91696 trains
+  everything, 91697 **only the unembedding** (`--train_only unembed`, 38.6M of 162.3M params). Code from branch
+  `inversion-train-only` (`079ae90`, not yet on main), submitted from worktree `.claude/worktrees/train-only` with the
+  main checkout's venv; outputs `runs/b128_N1_freeze/s1_inv_s1_Lfinal_N1{,_unembed}/`:
+  ```bash
+  M=~/dev/verbalization; cd $M/.claude/worktrees/train-only
+  PY=$M/.venv/bin/python RUN_ARGS="--init s1 --source s1" sbatch --array=0 -J inv-N1-unembed \
+      --output=$M/runs/slurm/%x_%A_%a.out $M/.claude/worktrees/gefion/inversion/run_grid.sbatch --layer final \
+      --n_tokens 1 --train_only unembed --name s1_inv_s1_Lfinal_N1_unembed --batch 128 --out_dir $M/runs/b128_N1_freeze \
+      --log_every 10 --print_every 10 --print_examples 8 --val_every 250 --val_dump_every 2500 --ckpt_every 50000
+  ```
+  (91696: `-J inv-N1-all`, `--train_only all --name s1_inv_s1_Lfinal_N1`.)
 - 2026-10-15, job `91686` (cancelled after ~6.7 min at steps ~7.3k-11.5k, checkpointed; the s1-init runs peaked
   lower, 73-88% at step 250, then fell to ~47-60% before partly recovering; random init just learned slower): the `91678` 1-token grid at **`--lr 2e-3`** (vs 6e-4), to see whether the s1-init
   runs' early peak and decline get sharper; `runs/b128_N1_lr2e-3/`, from main `2c41f3f`:
