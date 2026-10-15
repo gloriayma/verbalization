@@ -8,6 +8,13 @@
   3.13 on the GPU nodes, so a venv on it breaks in jobs.
 - **Slurm:** `h100-reserved`, QOS `normal`, no wall-time cap; the sbatch uses 7 days and self-requeues before that.
 
+## Standard flags (from 2026-10-15)
+Batch 512 with logging 4x more frequent in steps than the earlier batch-128 runs (same samples between log points):
+```bash
+F="--batch 512 --log_every 2 --print_every 2 --print_examples 8 --val_every 60 --val_dump_every 600 --ckpt_every 12500"
+```
+(`--print_every` must be a multiple of `--log_every`; `--val_dump_every` must be a multiple of `--val_every`.)
+
 ## Launched
 - 2026-10-15, jobs `91696` / `91697` (running): s1->s1, 1 token, `--layer final`, batch 128, lr 6e-4; 91696 trains
   everything, 91697 **only the unembedding** (`--train_only unembed`, 38.6M of 162.3M params). Code from branch
