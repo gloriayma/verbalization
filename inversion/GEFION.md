@@ -25,6 +25,9 @@
   MLP's input LayerNorm stays frozen), from `074f414`, `-J inv-N1-unembed-lastmlp --name s1_inv_s1_Lfinal_N1_unembed_lastmlp`.
   Job `91705` (running): fourth arm, `--train_only lastmlp` (only the last block's MLP, 4.7M params; unembedding
   frozen too), from `c1c3b30`, `-J inv-N1-lastmlp --name s1_inv_s1_Lfinal_N1_lastmlp`.
+  Job `91708` (running): unembed-only again at **`--lr 6e-5`** (10x lower), from `c1c3b30`,
+  `-J inv-N1-unembed-lr6e-5 --name s1_inv_s1_Lfinal_N1_unembed_lr6e-5`. By ~25 min: lastmlp 99.9-100%, all ~81%,
+  unembed_lastmlp ~78%, unembed (6e-4) 67-70% and unstable (val loss up to 6.2).
 - 2026-10-15, job `91686` (cancelled after ~6.7 min at steps ~7.3k-11.5k, checkpointed; the s1-init runs peaked
   lower, 73-88% at step 250, then fell to ~47-60% before partly recovering; random init just learned slower): the `91678` 1-token grid at **`--lr 2e-3`** (vs 6e-4), to see whether the s1-init
   runs' early peak and decline get sharper; `runs/b128_N1_lr2e-3/`, from main `2c41f3f`:
