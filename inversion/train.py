@@ -80,9 +80,9 @@ def parse_args():
     p.add_argument("--allow_eod", action="store_true", help="allow windows that cross a document boundary")
     p.add_argument("--input_norm", choices=["none", "layernorm"], default="none",
                    help="normalize activations before the inverter (default: feed them raw)")
-    p.add_argument("--train_only", choices=["all", "unembed", "unembed_lastmlp"], default="all",
-                   help="'unembed' freezes the whole inverter except its unembedding (output embedding) matrix; "
-                        "'unembed_lastmlp' also trains the last block's MLP (not its input LayerNorm)")
+    p.add_argument("--train_only", choices=["all", "unembed", "lastmlp", "unembed_lastmlp"], default="all",
+                   help="freeze the whole inverter except: 'unembed' its unembedding (output embedding) matrix; "
+                        "'lastmlp' the last block's MLP (not its input LayerNorm); 'unembed_lastmlp' both")
     return p.parse_args()
 
 
@@ -199,8 +199,9 @@ def main():
     inverter = build_inverter(args.init, args.init_seed, device)
     if args.train_only != "all":
         inverter.requires_grad_(False)
-        inverter.get_output_embeddings().requires_grad_(True)
-        if args.train_only == "unembed_lastmlp":
+        if "unembed" in args.train_only:
+            inverter.get_output_embeddings().requires_grad_(True)
+        if "lastmlp" in args.train_only:
             inverter.gpt_neox.layers[-1].mlp.requires_grad_(True)
     params = [p for p in inverter.parameters() if p.requires_grad]
     opt = torch.optim.AdamW(
