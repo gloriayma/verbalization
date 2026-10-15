@@ -54,7 +54,7 @@ F="--batch 512 --log_every 2 --print_every 2 --print_examples 8 --val_every 60 -
   FAMILY=s sbatch -J inv-N1 $G --layer final --n_tokens 1 ${=F}
   RUN_ARGS="--init s1 --source s1" sbatch --array=0 -J inv-N10ref $G --layer final --n_tokens 10 --name s1_inv_s1_Lfinal_N10 ${=F}
   ```
-- 2026-10-14, job `90374` (running): as 90360 but **50-token windows** and **`--layer final`**; random init, s1..s7
+- 2026-10-14, job `90374` (cancelled 2026-10-15 08:05 after 11h13m at step 252,321, checkpointed): as 90360 but **50-token windows** and **`--layer final`**; random init, s1..s7
   mix, s8/s9 held out, batch 512, `runs/b512/rand_inv_mixs1to7_Lfinal_N50/`. Adds
   `--n_tokens 50 --layer final --name rand_inv_mixs1to7_Lfinal_N50` to 90360's RUN_ARGS. ~6.6 steps/s, 37 GB; a val
   pass ~5 s. Batch benchmark at this size: 512 = 3354 windows/s (37 GB), 1024 = 3707 (+10%, 69 GB), 2048 = OOM.
