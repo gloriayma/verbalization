@@ -33,7 +33,8 @@ from inversion.model import MODELS, REVISION, SOURCE_SETS, SourceModel, build_in
 
 # Changing any of these makes a run directory's checkpoints incompatible / its curves incomparable.
 FIXED_ARGS = ["source", "init", "layer", "n_tokens", "batch", "lr", "warmup", "weight_decay", "grad_clip",
-              "data_seed", "mix_seed", "init_seed", "allow_eod", "input_norm"]
+              "data_seed", "mix_seed", "init_seed", "allow_eod", "input_norm", "train_only"]
+FIXED_DEFAULTS = {"train_only": "all"}  # value assumed for configs written before the arg existed
 
 
 def parse_args():
@@ -79,6 +80,8 @@ def parse_args():
     p.add_argument("--allow_eod", action="store_true", help="allow windows that cross a document boundary")
     p.add_argument("--input_norm", choices=["none", "layernorm"], default="none",
                    help="normalize activations before the inverter (default: feed them raw)")
+    p.add_argument("--train_only", choices=["all", "unembed"], default="all",
+                   help="'unembed' freezes the whole inverter except its unembedding (output embedding) matrix")
     return p.parse_args()
 
 
@@ -177,7 +180,8 @@ def main():
     if os.path.exists(config_path):
         with open(config_path) as f:
             old = json.load(f)
-        changed = {k: (old.get(k), config[k]) for k in FIXED_ARGS if old.get(k) != config[k]}
+        changed = {k: (old.get(k, FIXED_DEFAULTS.get(k)), config[k]) for k in FIXED_ARGS
+                   if old.get(k, FIXED_DEFAULTS.get(k)) != config[k]}
         if changed:
             raise SystemExit(f"{run_dir} was started with different settings {changed}; use another --name")
     with open(config_path, "w") as f:
@@ -192,6 +196,9 @@ def main():
     val_names = [n for _, members in val_groups for n in members]
     sources = {n: SourceModel(n, args.layer, device) for n in dict.fromkeys(train_names + val_names)}
     inverter = build_inverter(args.init, args.init_seed, device)
+    if args.train_only == "unembed":
+        inverter.requires_grad_(False)
+        inverter.get_output_embeddings().requires_grad_(True)
     params = [p for p in inverter.parameters() if p.requires_grad]
     opt = torch.optim.AdamW(
         [{"params": [p for p in params if p.ndim >= 2], "weight_decay": args.weight_decay},
@@ -212,7 +219,7 @@ def main():
     truncate_log(val_log_path, start_step)
     n_params = sum(p.numel() for p in inverter.parameters())
     print(f"run {name}: init={args.init} source={args.source} {train_names} layer={args.layer} N={args.n_tokens} "
-          f"inverter params={n_params / 1e6:.1f}M", flush=True)
+          f"inverter params={n_params / 1e6:.1f}M (trained: {sum(p.numel() for p in params) / 1e6:.1f}M)", flush=True)
 
     val_tokens, val_src = None, {}
     if val_groups:
