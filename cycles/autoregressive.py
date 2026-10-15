@@ -7,7 +7,7 @@ as a start in an earlier segment) and generates greedily with the full context u
     the most repeats of any block the sequence ends with (2+ counts), so long-period loops that can't fit 5 copies
     still show up.
 
-    python -m cycles.autoregressive [--model s1] [--segments 100] [--repeats 5] [--out runs/cycles]
+    python -m cycles.autoregressive [--model s1] [--segments 100] [--repeats 5] [--out cycles/runs]
 """
 
 import argparse
@@ -18,7 +18,7 @@ from collections import Counter
 import numpy as np
 import torch
 
-from cycles.common import V, default_device, load, pieces, start_token
+from cycles.common import RUNS, V, default_device, load, pieces, start_token
 
 
 def find_cycle(seq, repeats, min_repeats=None):
@@ -66,7 +66,7 @@ def main():
     p.add_argument("--segments", type=int, default=100)
     p.add_argument("--repeats", type=int, default=5)
     p.add_argument("--max_len", type=int, default=None, help="default: the model's max_position_embeddings (2048)")
-    p.add_argument("--out", default="runs/cycles")
+    p.add_argument("--out", default=RUNS)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default=default_device())
     args = p.parse_args()

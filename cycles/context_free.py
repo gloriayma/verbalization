@@ -9,7 +9,7 @@ token), so we compute f for every token in one batched pass and then:
     has been visited;
   - compare f and its cycles across models (default: the nine main seeds s1..s9).
 
-    python -m cycles.context_free [--models s1,...,s9] [--out runs/cycles]
+    python -m cycles.context_free [--models s1,...,s9] [--out cycles/runs]
 """
 
 import argparse
@@ -21,7 +21,7 @@ from itertools import combinations
 import numpy as np
 import torch
 
-from cycles.common import V, default_device, load, pieces, start_token
+from cycles.common import RUNS, V, default_device, load, pieces, start_token
 
 
 @torch.no_grad()
@@ -162,7 +162,7 @@ def compare(results, out):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--models", default=",".join(f"s{i}" for i in range(1, 10)))
-    p.add_argument("--out", default="runs/cycles")
+    p.add_argument("--out", default=RUNS)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--show", type=int, default=20)
     p.add_argument("--device", default=default_device())
