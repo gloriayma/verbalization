@@ -59,11 +59,11 @@ F="--batch 512 --log_every 2 --print_every 2 --print_examples 8 --val_every 60 -
   `--n_tokens 50 --layer final --name rand_inv_mixs1to7_Lfinal_N50` to 90360's RUN_ARGS. ~6.6 steps/s, 37 GB; a val
   pass ~5 s. Batch benchmark at this size: 512 = 3354 windows/s (37 GB), 1024 = 3707 (+10%, 69 GB), 2048 = OOM.
   90360 (layer 6, 10 tokens) cancelled at step 23501, checkpointed.
-- 2026-10-14, job `90360` (running): random init, trained on a uniform mix of **s1..s7**, **s8, s9 held out**; batch
+- 2026-10-14, job `90360` (cancelled 2026-10-14 20:47): random init, trained on a uniform mix of **s1..s7**, **s8, s9 held out**; batch
   512, layer 6, `runs/b512/rand_inv_mixs1to7_L6/`; val groups `s1-7` (seen) and `s8-9` (held out). From main `2c41f3f`:
   `RUN_ARGS="--init random --source mixs1to7 --val_groups s1,s2,s3,s4,s5,s6,s7;s8,s9" sbatch --array=0 -J inv-mix7-rand $G ${=F}`
   (same `F` as below). Jobs 90346/90347 (9-way mix) were cancelled at steps ~30k/29k and checkpointed.
-- 2026-10-14, jobs `90346` / `90347` (running): 9-way mix of s1..s9 at layer 6, **batch 512**, outputs in `runs/b512/`;
+- 2026-10-14, jobs `90346` / `90347` (cancelled 2026-10-14 20:23): 9-way mix of s1..s9 at layer 6, **batch 512**, outputs in `runs/b512/`;
   random init (val lumped as one `s1-9` group) and s1 init (val `s1` and lumped `s2-9`). From main `b5da069`:
   ```bash
   G=.claude/worktrees/gefion/inversion/run_grid.sbatch
@@ -81,7 +81,7 @@ F="--batch 512 --log_every 2 --print_every 2 --print_examples 8 --val_every 60 -
       --val_dump_every 2500 --ckpt_every 50000
   .venv/bin/python -m inversion.watch --runs_dir runs/b128 --runs "*_Lfinal"   # live view
   ```
-- 2026-10-14, job `90217` (running): `s` family, layer 6, **batch 128**, from main `be87c95`, outputs in `runs/b128/`:
+- 2026-10-14, job `90217` (cancelled 2026-10-14 19:25): `s` family, layer 6, **batch 128**, from main `be87c95`, outputs in `runs/b128/`:
   ```bash
   cd ~/dev/verbalization && FAMILY=s sbatch .claude/worktrees/gefion/inversion/run_grid.sbatch --batch 128 \
       --out_dir runs/b128 --log_every 10 --print_every 10 --print_examples 8 --val_every 250 --val_dump_every 2500 \
