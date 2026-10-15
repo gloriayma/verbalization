@@ -16,7 +16,9 @@ F="--batch 512 --log_every 2 --print_every 2 --print_examples 8 --val_every 60 -
 (`--print_every` must be a multiple of `--log_every`; `--val_dump_every` must be a multiple of `--val_every`.)
 
 ## Launched
-- 2026-10-15, jobs `91696` / `91697` (running): s1->s1, 1 token, `--layer final`, batch 128, lr 6e-4; 91696 trains
+- 2026-10-15, jobs `91696` / `91697` (cancelled with 91699/91705/91708 after 10-36 min, all checkpointed; final:
+  lastmlp 100%, all ~82%, unembed_lastmlp ~78%, unembed 6e-4 ~62% and blown up (val loss 15), unembed 6e-5 ~66% after
+  peaking ~74%: a 10x lower lr doesn't lift the unembed-only ceiling): s1->s1, 1 token, `--layer final`, batch 128, lr 6e-4; 91696 trains
   everything, 91697 **only the unembedding** (`--train_only unembed`, 38.6M of 162.3M params). Code from branch
   `inversion-train-only` (`079ae90`, not yet on main), submitted from worktree `.claude/worktrees/train-only` with the
   main checkout's venv; outputs `runs/b128_N1_freeze/s1_inv_s1_Lfinal_N1{,_unembed}/`:
@@ -28,11 +30,11 @@ F="--batch 512 --log_every 2 --print_every 2 --print_examples 8 --val_every 60 -
       --log_every 10 --print_every 10 --print_examples 8 --val_every 250 --val_dump_every 2500 --ckpt_every 50000
   ```
   (91696: `-J inv-N1-all`, `--train_only all --name s1_inv_s1_Lfinal_N1`.)
-  Job `91699` (running): third arm, `--train_only unembed_lastmlp` (unembedding + last block's MLP, 43.4M params; the
+  Job `91699` (cancelled): third arm, `--train_only unembed_lastmlp` (unembedding + last block's MLP, 43.4M params; the
   MLP's input LayerNorm stays frozen), from `074f414`, `-J inv-N1-unembed-lastmlp --name s1_inv_s1_Lfinal_N1_unembed_lastmlp`.
-  Job `91705` (running): fourth arm, `--train_only lastmlp` (only the last block's MLP, 4.7M params; unembedding
+  Job `91705` (cancelled): fourth arm, `--train_only lastmlp` (only the last block's MLP, 4.7M params; unembedding
   frozen too), from `c1c3b30`, `-J inv-N1-lastmlp --name s1_inv_s1_Lfinal_N1_lastmlp`.
-  Job `91708` (running): unembed-only again at **`--lr 6e-5`** (10x lower), from `c1c3b30`,
+  Job `91708` (cancelled): unembed-only again at **`--lr 6e-5`** (10x lower), from `c1c3b30`,
   `-J inv-N1-unembed-lr6e-5 --name s1_inv_s1_Lfinal_N1_unembed_lr6e-5`. By ~25 min: lastmlp 99.9-100%, all ~81%,
   unembed_lastmlp ~78%, unembed (6e-4) 67-70% and unstable (val loss up to 6.2).
 - 2026-10-15, job `91686` (cancelled after ~6.7 min at steps ~7.3k-11.5k, checkpointed; the s1-init runs peaked
