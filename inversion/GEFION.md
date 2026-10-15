@@ -9,7 +9,8 @@
 - **Slurm:** `h100-reserved`, QOS `normal`, no wall-time cap; the sbatch uses 7 days and self-requeues before that.
 
 ## Launched
-- 2026-10-15, job `91686` (running): the `91678` 1-token grid at **`--lr 2e-3`** (vs 6e-4), to see whether the s1-init
+- 2026-10-15, job `91686` (cancelled after ~6.7 min at steps ~7.3k-11.5k, checkpointed; the s1-init runs peaked
+  lower, 73-88% at step 250, then fell to ~47-60% before partly recovering; random init just learned slower): the `91678` 1-token grid at **`--lr 2e-3`** (vs 6e-4), to see whether the s1-init
   runs' early peak and decline get sharper; `runs/b128_N1_lr2e-3/`, from main `2c41f3f`:
   ```bash
   FAMILY=s sbatch -J inv-N1-lr2e-3 $G --layer final --n_tokens 1 --lr 2e-3 --batch 128 --out_dir runs/b128_N1_lr2e-3 \
