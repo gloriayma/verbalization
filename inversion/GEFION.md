@@ -9,7 +9,8 @@
 - **Slurm:** `h100-reserved`, QOS `normal`, no wall-time cap; the sbatch uses 7 days and self-requeues before that.
 
 ## Launched
-- 2026-10-15, jobs `91678` / `91679` (running): the `90296` grid (`s` family, `--layer final`, batch 128) with
+- 2026-10-15, jobs `91678` / `91679` (cancelled after ~4 min at steps ~4k-6.7k, checkpointed; the N=1 runs had
+  plateaued at ~74-82% val acc, with the s1-init ones peaking at 94% at step 250 during warmup and falling as LR hit 6e-4): the `90296` grid (`s` family, `--layer final`, batch 128) with
   **1-token windows**, plus one s1->s1 run at 10 tokens for comparison, all in `runs/b128_N1/` (its own dir: default
   run names have no `_N`, so reusing `runs/b128/` would resume the N=10 `*_Lfinal` checkpoints). From main `2c41f3f`:
   ```bash
