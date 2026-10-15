@@ -23,6 +23,8 @@
   (91696: `-J inv-N1-all`, `--train_only all --name s1_inv_s1_Lfinal_N1`.)
   Job `91699` (running): third arm, `--train_only unembed_lastmlp` (unembedding + last block's MLP, 43.4M params; the
   MLP's input LayerNorm stays frozen), from `074f414`, `-J inv-N1-unembed-lastmlp --name s1_inv_s1_Lfinal_N1_unembed_lastmlp`.
+  Job `91705` (running): fourth arm, `--train_only lastmlp` (only the last block's MLP, 4.7M params; unembedding
+  frozen too), from `c1c3b30`, `-J inv-N1-lastmlp --name s1_inv_s1_Lfinal_N1_lastmlp`.
 - 2026-10-15, job `91686` (cancelled after ~6.7 min at steps ~7.3k-11.5k, checkpointed; the s1-init runs peaked
   lower, 73-88% at step 250, then fell to ~47-60% before partly recovering; random init just learned slower): the `91678` 1-token grid at **`--lr 2e-3`** (vs 6e-4), to see whether the s1-init
   runs' early peak and decline get sharper; `runs/b128_N1_lr2e-3/`, from main `2c41f3f`:
