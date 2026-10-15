@@ -9,6 +9,15 @@
 - **Slurm:** `h100-reserved`, QOS `normal`, no wall-time cap; the sbatch uses 7 days and self-requeues before that.
 
 ## Launched
+- 2026-10-15, jobs `91678` / `91679` (running): the `90296` grid (`s` family, `--layer final`, batch 128) with
+  **1-token windows**, plus one s1->s1 run at 10 tokens for comparison, all in `runs/b128_N1/` (its own dir: default
+  run names have no `_N`, so reusing `runs/b128/` would resume the N=10 `*_Lfinal` checkpoints). From main `2c41f3f`:
+  ```bash
+  G=.claude/worktrees/gefion/inversion/run_grid.sbatch
+  F="--batch 128 --out_dir runs/b128_N1 --log_every 10 --print_every 10 --print_examples 8 --val_every 250 --val_dump_every 2500 --ckpt_every 50000"
+  FAMILY=s sbatch -J inv-N1 $G --layer final --n_tokens 1 ${=F}
+  RUN_ARGS="--init s1 --source s1" sbatch --array=0 -J inv-N10ref $G --layer final --n_tokens 10 --name s1_inv_s1_Lfinal_N10 ${=F}
+  ```
 - 2026-10-14, job `90374` (running): as 90360 but **50-token windows** and **`--layer final`**; random init, s1..s7
   mix, s8/s9 held out, batch 512, `runs/b512/rand_inv_mixs1to7_Lfinal_N50/`. Adds
   `--n_tokens 50 --layer final --name rand_inv_mixs1to7_Lfinal_N50` to 90360's RUN_ARGS. ~6.6 steps/s, 37 GB; a val
