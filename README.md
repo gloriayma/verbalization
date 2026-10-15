@@ -147,10 +147,10 @@ Two experiments on frozen PolyPythia 160m models (final checkpoint, loaded with 
   f: vocab → vocab. So f is computed for every token in one batched pass, then decomposed into all of its cycles and
   their basins. It is then walked from "I": when the chain reaches a visited token, it jumps to a random unvisited one, until the
   whole vocab is covered. Writes `f.npy`, `cycles.json` (by basin size) and `walk.jsonl` to
-  `runs/cycles/<model>/context_free/`, plus a cross-seed `runs/cycles/context_free_compare.json`.
+  `cycles/runs/<model>/context_free/`, plus a cross-seed `cycles/runs/context_free_compare.json`.
 - **`python -m cycles.autoregressive`** (B, default `--model s1`): ordinary greedy generation with the full context
   until the output ends in one block repeated `--repeats` (5) times, or until it fills the 2048-token context. Then it
   restarts from a fresh context at a random token not yet generated. Writes
-  `runs/cycles/<model>/autoregressive/segments.jsonl`.
+  `cycles/runs/<model>/autoregressive/segments.jsonl`.
 
 A takes about a minute for all nine seeds on one GPU. B takes up to about 2048 decoding steps per segment (`--segments`, default 100).

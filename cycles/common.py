@@ -1,5 +1,7 @@
 """Frozen PolyPythia-160m loading and token formatting shared by the two cycle experiments."""
 
+import os
+
 import torch
 from transformers import AutoTokenizer, GPTNeoXForCausalLM
 
@@ -7,6 +9,7 @@ from inversion.model import model_dir
 
 V = 50277  # real vocab size; unembedding rows past this (up to 50304) are padding and never picked
 START = "I"  # token 42, no leading space
+RUNS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs")  # outputs stay inside the project folder
 
 
 def load(name, device):
