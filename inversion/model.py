@@ -5,6 +5,7 @@ import os
 import torch
 import torch.nn.functional as F
 from transformers import AutoConfig, GPTNeoXForCausalLM
+from transformers.modeling_outputs import CausalLMOutput
 
 from inversion.data import data_dir
 
@@ -59,11 +60,34 @@ class SourceModel:
         return out
 
 
-def build_inverter(init, init_seed, device):
+class MLPInverter(torch.nn.Module):
+    """One Pythia block's MLP on its own (LayerNorm -> 768 -> 3072 GELU -> 768, freshly initialized, trained), then the
+    init model's final_layer_norm and unembedding, both frozen. No attention: each position is inverted from its own
+    activation vector alone.
+    """
+
+    def __init__(self, init, init_seed):
+        super().__init__()
+        pretrained = GPTNeoXForCausalLM.from_pretrained(model_dir(init), dtype=torch.float32)
+        torch.manual_seed(init_seed)
+        fresh = GPTNeoXForCausalLM(pretrained.config)  # HF's GPTNeoX init, as for --init random
+        self.ln = fresh.gpt_neox.layers[-1].post_attention_layernorm
+        self.mlp = fresh.gpt_neox.layers[-1].mlp
+        self.final_layer_norm = pretrained.gpt_neox.final_layer_norm.requires_grad_(False)
+        self.unembed = pretrained.get_output_embeddings().requires_grad_(False)
+
+    def forward(self, inputs_embeds):
+        return CausalLMOutput(logits=self.unembed(self.final_layer_norm(self.mlp(self.ln(inputs_embeds)))))
+
+
+def build_inverter(init, init_seed, device, arch="pythia"):
     """Pythia-160m: pretrained weights of a PolyPythia (init='w1', ...) or freshly initialized (init='random').
 
     Random init uses HF's GPTNeoX init (normal std=initializer_range), not GPT-NeoX's small_init/wang_init.
+    arch='mlp': an MLPInverter whose frozen final LayerNorm and unembedding come from `init`.
     """
+    if arch == "mlp":
+        return MLPInverter(init, init_seed).to(device)
     if init == "random":
         config = AutoConfig.from_pretrained(model_dir("w1"))
         torch.manual_seed(init_seed)
